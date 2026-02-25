@@ -24,6 +24,31 @@ function ensureString(val: unknown): string {
     return String(val)
 }
 
+// ─── Clean PDF/Document Text (removes TOC noise, page numbers, etc.) ───
+
+function cleanPDFText(text: string): string {
+    if (!text || typeof text !== "string") return ""
+    
+    const lines = text.split("\n")
+    const cleaned = lines.filter(line => {
+        const trimmed = line.trim()
+        // Remove empty lines
+        if (!trimmed) return false
+        // Remove page number lines (just digits)
+        if (/^\d+\s*$/.test(trimmed)) return false
+        // Remove lines with repeated dots (TOC patterns like ".... 36")
+        if (/\.{3,}/.test(trimmed)) return false
+        // Remove TOC-like patterns: lines with numbers and dots together
+        if (/\d+\s*\.{2,}|\.\s*\d+$/.test(trimmed)) return false
+        // Remove lines shorter than 10 characters (usually noise)
+        if (trimmed.length < 10) return false
+        return true
+    })
+    
+    // Collapse multiple newlines and trim
+    return cleaned.join("\n").replace(/\n{3,}/g, "\n\n").trim()
+}
+
 // ─── Call Gemini (queued + retry-aware) ───
 async function callGemini(systemInstruction: string, prompt: string, label: string = "doc-gemini"): Promise<string> {
     return queuedRequest(async (attempt) => {
@@ -288,7 +313,10 @@ Return ONLY valid JSON:
         }
 
         const result = parseJSON(rawResult)
-        extractedText = result.extractedText || extractedText || ""
+        // Clean PDF extracted text to remove TOC noise, page numbers, etc.
+        extractedText = isPDF 
+            ? cleanPDFText(result.extractedText || extractedText || "")
+            : (result.extractedText || extractedText || "")
 
         // Generate TTS-friendly summary
         console.log(`[DocAnalysis] Generating TTS summary...`)
