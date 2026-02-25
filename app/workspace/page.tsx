@@ -280,28 +280,43 @@ export default function WorkspacePage() {
         })()
 
         try {
-            // Phase 1: Upload to R2
+            // Phase 1: Get presigned URL
+            onProgress("uploading", 5)
+            toast.info("Preparing upload...")
+
+            const presignRes = await fetch("/api/presigned-upload-video", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filename: file.name,
+                    contentType: file.type,
+                    userId: user.id,
+                    summaryId: summaryId,
+                }),
+            })
+
+            if (!presignRes.ok) {
+                const err = await presignRes.json()
+                throw new Error(err.error || "Failed to get upload URL")
+            }
+
+            const { uploadUrl, fileUrl } = await presignRes.json()
+
+            // Phase 2: Upload directly to R2 using presigned URL
             onProgress("uploading", 10)
             toast.info("Uploading video to CDN...")
 
-            const uploadRes = await fetch("/api/upload-video", {
-                method: "POST",
-                headers: {
-                    "Content-Type": file.type,
-                    "x-file-name": encodeURIComponent(file.name),
-                    "x-file-type": file.type,
-                    "x-user-id": user.id,
-                    "x-summary-id": summaryId,
-                },
+            const uploadRes = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: { "Content-Type": file.type },
                 body: file,
             })
 
             if (!uploadRes.ok) {
-                const err = await uploadRes.json()
-                throw new Error(err.error || "Upload failed")
+                throw new Error("Upload to CDN failed")
             }
 
-            const { videoUrl } = await uploadRes.json()
+            const videoUrl = fileUrl
             onProgress("analyzing", 50)
             toast.info("AI is analyzing your video...")
 

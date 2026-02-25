@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
         const { data: existing } = await supabase
             .from("summaries")
-            .select("id, custom_slug")
+            .select("id, slug")
             .eq("id", id)
             .single()
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         const { data: conflict } = await supabase
             .from("summaries")
             .select("id")
-            .eq("custom_slug", cleanSlug)
+            .eq("slug", cleanSlug)
             .neq("id", id)
             .single()
 
@@ -45,12 +45,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Update in Supabase
-        const { error: updateError } = await supabase
+        const { data: updated, error: updateError } = await supabase
             .from("summaries")
-            .update({ custom_slug: cleanSlug })
+            .update({ slug: cleanSlug })
             .eq("id", id)
+            .select()
+            .single()
 
-        if (updateError) {
+        if (updateError || !updated) {
+            if (!updated) {
+                return NextResponse.json({ error: "Summary not found" }, { status: 404 })
+            }
             console.error("[Rename] Supabase update error:", updateError)
             return NextResponse.json({ error: "Failed to save custom URL" }, { status: 500 })
         }
@@ -58,7 +63,7 @@ export async function POST(request: NextRequest) {
         // Also update in-memory store (best-effort)
         try { renameSummary(id, cleanSlug) } catch { }
 
-        return NextResponse.json({ success: true, slug: cleanSlug })
+        return NextResponse.json({ success: true, slug: cleanSlug, data: updated })
     } catch (e: any) {
         return NextResponse.json({ error: e.message || "Rename failed" }, { status: 500 })
     }

@@ -7,6 +7,52 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
+// ─── Safe Summary Parser ───
+
+function parseSummaryContent(raw: string): { type: "parsed"; summary: string; keyPoints: string[] } | { type: "plain"; text: string } {
+    if (typeof raw !== "string") return { type: "plain", text: String(raw || "") }
+    const trimmed = raw.trim()
+    if (!trimmed.startsWith("{")) return { type: "plain", text: raw }
+    try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && typeof parsed.summary === "string") {
+            const keyPoints = Array.isArray(parsed.keyPoints)
+                ? parsed.keyPoints.map((kp: any) => (typeof kp === "string" ? kp : kp?.point || kp?.text || String(kp)))
+                : []
+            return { type: "parsed", summary: parsed.summary, keyPoints }
+        }
+        return { type: "plain", text: raw }
+    } catch {
+        return { type: "plain", text: raw }
+    }
+}
+
+// ─── Summary Content Renderer ───
+
+function SummaryContent({ content }: { content: string }) {
+    const result = parseSummaryContent(content)
+    if (result.type === "parsed") {
+        return (
+            <>
+                <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed" style={{ whiteSpace: "pre-line" }}>{result.summary}</p>
+                {result.keyPoints.length > 0 && (
+                    <ul className="mt-4 space-y-2">
+                        {result.keyPoints.map((point, i) => (
+                            <li key={i} className="flex gap-2 items-start">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                                    {i + 1}
+                                </span>
+                                <span className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed" style={{ whiteSpace: "pre-line" }}>{point}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </>
+        )
+    }
+    return <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed" style={{ whiteSpace: "pre-line" }}>{result.text}</p>
+}
+
 // ─── Typewriter Text Component ───
 
 function TypewriterText({ text, isAnimating, className }: { text: string; isAnimating: boolean; className?: string }) {
@@ -819,7 +865,7 @@ export default function DocSummaryPage() {
                         </div>
                         <h2 className="text-lg font-semibold text-foreground">{t("Summary")}</h2>
                     </div>
-                    <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-wrap">{displaySummary}</p>
+                    <SummaryContent content={displaySummary} />
                 </section>
 
                 {/* Key Points */}
