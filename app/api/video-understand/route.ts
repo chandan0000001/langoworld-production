@@ -9,6 +9,21 @@ export const maxDuration = 120
 
 const GEMINI_MODEL = "gemini-2.5-flash"
 
+// ─── Ensure String Helper (handles AI returning objects instead of strings) ───
+
+function ensureString(val: unknown): string {
+    if (typeof val === "string") return val
+    if (val === null || val === undefined) return ""
+    if (typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if (typeof obj.summary === "string") return obj.summary
+        if (typeof obj.content === "string") return obj.content
+        if (typeof obj.text === "string") return obj.text
+        return JSON.stringify(val, null, 2)
+    }
+    return String(val)
+}
+
 // ─── Call Gemini (queued + retry-aware) ───
 async function callGemini(systemInstruction: string, prompt: string, label: string = "gemini"): Promise<string> {
     return queuedRequest(async (attempt) => {
@@ -208,22 +223,22 @@ Return ONLY valid JSON:
         try {
             ttsSummary = await callGemini(
                 `You are a friendly explainer. Rewrite the following summary as if you're casually explaining it to a friend over coffee. Make it perfect for text-to-speech: conversational, clear, no jargon, no bullet points. Use natural pauses and transitions. Keep it under 500 words. Write in English.`,
-                result.summary || "This video explores interesting content.",
+                ensureString(result.summary) || "This video explores interesting content.",
                 "video-tts"
             )
             console.log(`[Video] ✅ TTS summary: ${ttsSummary.length} chars`)
         } catch (e: any) {
             console.log(`[Video] ⚠ TTS summary failed: ${e.message}`)
-            ttsSummary = result.summary || ""
+            ttsSummary = ensureString(result.summary)
         }
 
         // Build chapters
         const chaptersData = (result.chapters || []).map((ch: any, i: number) => ({
             id: `vid-ch-${i + 1}-${Date.now()}`,
             title: `Part ${i + 1}`,
-            content: `<p>${(ch.content || "").replace(/\n/g, "</p><p>")}</p>`,
-            textContent: ch.content || "",
-            wordCount: (ch.content || "").split(/\s+/).length,
+            content: `<p>${ensureString(ch.content).replace(/\n/g, "</p><p>")}</p>`,
+            textContent: ensureString(ch.content),
+            wordCount: ensureString(ch.content).split(/\s+/).length,
             startTime: ch.startTime || "0:00",
         }))
 
@@ -235,13 +250,13 @@ Return ONLY valid JSON:
             videoUrl,
             videoTitle: videoTitle || fileName || "Uploaded Video",
             channel: "Uploaded",
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             transcript,
             keyPoints: (result.keyPoints || []).map((kp: any) => ({
                 timestamp: kp.timestamp || "0:00",
-                point: kp.point || "",
+                point: ensureString(kp.point),
             })),
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             ttsSummary,
             chapters: chaptersData,
             createdAt: new Date().toISOString(),
@@ -250,9 +265,9 @@ Return ONLY valid JSON:
         console.log(`[Video] ✅ Saved summary: ${summaryId}`)
 
         const response = {
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             keyPoints: summaryData.keyPoints,
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             chapters: chaptersData,
             transcript,
             ttsSummary,

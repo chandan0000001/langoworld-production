@@ -38,6 +38,20 @@ interface VideoSummary {
   explanation: string
 }
 
+// ─── Helper: safely extract string from possibly nested summary ───
+
+function safeString(val: unknown): string {
+  if (typeof val === "string") return val
+  if (val === null || val === undefined) return ""
+  if (typeof val === "object") {
+    const obj = val as Record<string, unknown>
+    if (typeof obj.summary === "string") return obj.summary
+    if (typeof obj.content === "string") return obj.content
+    if (typeof obj.text === "string") return obj.text
+  }
+  return ""
+}
+
 interface FeatureResult {
   summary: VideoSummary | null
   pageId: string | null
@@ -401,6 +415,9 @@ function SummaryPageNode({ data }: { data: any }) {
   const { t } = useLingo()
   const { videoTitle, summaryPageUrl, summary, theme } = data
 
+  // Ensure summary is a string (defensive handling for AI returning objects)
+  const displaySummary = safeString(summary)
+
   // Theme colors
   const colors = theme === "orange"
     ? { handle: "!bg-orange-500 !border-orange-600", iconBg: "bg-orange-500/10 dark:bg-orange-500/20", icon: "text-orange-500", btn: "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20 hover:shadow-orange-500/30" }
@@ -432,7 +449,7 @@ function SummaryPageNode({ data }: { data: any }) {
         <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2">
           {videoTitle || t("Video Summary")}
         </h4>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">{summary}</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">{displaySummary}</p>
       </div>
 
       {/* Link */}
@@ -1248,7 +1265,7 @@ export function LangoWorldFlow({
             videoTitle: ytResult.title || "YouTube Summary",
             summaryPageUrl: ytResult.pageUrl,
             summaryPageId: ytResult.pageId,
-            summary: ytResult.summary?.summary || "",
+            summary: safeString(ytResult.summary?.summary),
           },
         })
 
@@ -1278,7 +1295,7 @@ export function LangoWorldFlow({
             videoTitle: uploadResult.title || "Uploaded Video Summary",
             summaryPageUrl: uploadResult.pageUrl,
             summaryPageId: uploadResult.pageId,
-            summary: uploadResult.summary?.summary || "",
+            summary: safeString(uploadResult.summary?.summary),
             theme: "orange",
           },
         })
@@ -1310,7 +1327,7 @@ export function LangoWorldFlow({
             videoTitle: docResult.title || "Document Summary",
             summaryPageUrl: docResult.pageUrl,
             summaryPageId: docResult.pageId,
-            summary: docResult.summary?.summary || "",
+            summary: safeString(docResult.summary?.summary),
             theme: "blue",
           },
         })

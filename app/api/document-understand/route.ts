@@ -9,6 +9,21 @@ export const maxDuration = 120
 
 const GEMINI_MODEL = "gemini-2.5-flash"
 
+// ─── Ensure String Helper (handles AI returning objects instead of strings) ───
+
+function ensureString(val: unknown): string {
+    if (typeof val === "string") return val
+    if (val === null || val === undefined) return ""
+    if (typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if (typeof obj.summary === "string") return obj.summary
+        if (typeof obj.content === "string") return obj.content
+        if (typeof obj.text === "string") return obj.text
+        return JSON.stringify(val, null, 2)
+    }
+    return String(val)
+}
+
 // ─── Call Gemini (queued + retry-aware) ───
 async function callGemini(systemInstruction: string, prompt: string, label: string = "doc-gemini"): Promise<string> {
     return queuedRequest(async (attempt) => {
@@ -281,12 +296,12 @@ Return ONLY valid JSON:
         try {
             ttsSummary = await callGemini(
                 `You are a friendly explainer. Rewrite the following summary as if you're casually explaining it to a friend over coffee. Make it perfect for text-to-speech: conversational, clear, no jargon, no bullet points. Use natural pauses. Keep it under 500 words. Write in English.`,
-                result.summary || "This document contains interesting content.",
+                ensureString(result.summary) || "This document contains interesting content.",
                 "doc-tts"
             )
         } catch (e: any) {
             console.log(`[DocAnalysis] ⚠ TTS summary failed: ${e.message}`)
-            ttsSummary = result.summary || ""
+            ttsSummary = ensureString(result.summary)
         }
 
         // Save summary
@@ -297,13 +312,13 @@ Return ONLY valid JSON:
             videoUrl: docUrl,
             videoTitle: docName,
             channel: "Document",
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             transcript: extractedText,
             keyPoints: (result.keyPoints || []).map((kp: any) => ({
                 timestamp: kp.timestamp || "—",
-                point: kp.point || "",
+                point: ensureString(kp.point),
             })),
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             ttsSummary,
             chapters: [],
             createdAt: new Date().toISOString(),
@@ -312,9 +327,9 @@ Return ONLY valid JSON:
         console.log(`[DocAnalysis] ✅ Saved summary: ${summaryId}`)
 
         return NextResponse.json({
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             keyPoints: summaryData.keyPoints,
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             extractedText,
             ttsSummary,
             summaryPageId: summaryId,

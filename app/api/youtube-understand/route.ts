@@ -7,6 +7,23 @@ import { queuedRequest, ApiError } from "@/lib/request-queue"
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
 
+// ─── Ensure String Helper (handles AI returning objects instead of strings) ───
+
+function ensureString(val: unknown): string {
+    if (typeof val === "string") return val
+    if (val === null || val === undefined) return ""
+    if (typeof val === "object") {
+        // Handle nested {summary: "..."} or {content: "..."} or {text: "..."}
+        const obj = val as Record<string, unknown>
+        if (typeof obj.summary === "string") return obj.summary
+        if (typeof obj.content === "string") return obj.content
+        if (typeof obj.text === "string") return obj.text
+        // Fallback: stringify but make it readable
+        return JSON.stringify(val, null, 2)
+    }
+    return String(val)
+}
+
 // ─── Config ───
 
 const GEMINI_MODEL = "gemini-2.5-flash"
@@ -540,16 +557,16 @@ Rules:
             console.log(`[YT] ✅ TTS summary: ${ttsSummary.length} chars`)
         } catch (e: any) {
             console.log(`[YT] ⚠ TTS summary failed: ${e.message}`)
-            ttsSummary = result.summary || ""
+            ttsSummary = ensureString(result.summary)
         }
 
         // Build chapters
         const chaptersData = (result.chapters || []).map((ch: any, i: number) => ({
             id: `yt-ch-${i + 1}-${Date.now()}`,
             title: `Part ${i + 1}`,
-            content: `<p>${(ch.content || "").replace(/\n/g, "</p><p>")}</p>`,
-            textContent: ch.content || "",
-            wordCount: (ch.content || "").split(/\s+/).length,
+            content: `<p>${ensureString(ch.content).replace(/\n/g, "</p><p>")}</p>`,
+            textContent: ensureString(ch.content),
+            wordCount: ensureString(ch.content).split(/\s+/).length,
             startTime: ch.startTime || "0:00",
         }))
 
@@ -561,13 +578,13 @@ Rules:
             videoUrl: normalUrl,
             videoTitle: videoInfo.title,
             channel: videoInfo.channel,
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             transcript,
             keyPoints: (result.keyPoints || []).map((kp: any) => ({
                 timestamp: kp.timestamp || "0:00",
-                point: kp.point || "",
+                point: ensureString(kp.point),
             })),
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             ttsSummary,
             chapters: chaptersData,
             createdAt: new Date().toISOString(),
@@ -576,9 +593,9 @@ Rules:
         console.log(`[YT] ✅ Saved summary: ${summaryId}`)
 
         const response = {
-            summary: result.summary || "",
+            summary: ensureString(result.summary),
             keyPoints: summaryData.keyPoints,
-            explanation: result.explanation || "",
+            explanation: ensureString(result.explanation),
             chapters: chaptersData,
             transcript,
             ttsSummary,
