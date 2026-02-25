@@ -7,6 +7,26 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
+// ─── Safe Summary Parser ───
+
+function parseSummaryString(raw: string): { summary: string; keyPoints?: any[] } {
+    if (typeof raw !== "string") return { summary: String(raw || "") }
+    const trimmed = raw.trim()
+    if (!trimmed.startsWith("{")) return { summary: raw }
+    try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && typeof parsed.summary === "string") {
+            return {
+                summary: parsed.summary,
+                keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
+            }
+        }
+        return { summary: raw }
+    } catch {
+        return { summary: raw }
+    }
+}
+
 // ─── Typewriter Text Component ───
 
 function TypewriterText({ text, isAnimating, className }: { text: string; isAnimating: boolean; className?: string }) {
@@ -729,10 +749,12 @@ export default function VideoSummaryPage() {
 
     // Resolved display data
     const orig = originalDataRef.current
-    const rawSummary = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
+    const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
+    const parsedSummary = parseSummaryString(rawSummaryValue)
+    const rawSummary = parsedSummary.summary
     const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
     const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
-    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || [])
+    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
     const displaySummary = showOriginal ? rawSummary : applyReplacements(rawSummary)
     const displayExplanation = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
     const displayTTS = showOriginal ? rawTTS : applyReplacements(rawTTS)
