@@ -407,7 +407,7 @@ export default function WorkspacePage() {
         })()
 
         try {
-            // Phase 1: Upload to R2
+            // Phase 1: Upload directly to R2 via presigned URL (bypasses Vercel 413 limit)
             onProgress("uploading", 10)
             toast.info("Uploading document...")
 
@@ -420,24 +420,38 @@ export default function WorkspacePage() {
                 return "application/octet-stream"
             })()
 
-            const uploadRes = await fetch("/api/upload-document", {
+            // Step 1a: Get presigned URL from our API
+            const presignRes = await fetch("/api/presigned-upload", {
                 method: "POST",
-                headers: {
-                    "Content-Type": resolvedType,
-                    "x-file-name": encodeURIComponent(file.name),
-                    "x-file-type": resolvedType,
-                    "x-user-id": user.id,
-                    "x-doc-id": docId,
-                },
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filename: file.name,
+                    contentType: resolvedType,
+                    userId: user.id,
+                    docId: docId,
+                }),
+            })
+
+            if (!presignRes.ok) {
+                const err = await presignRes.json()
+                throw new Error(err.error || "Failed to get upload URL")
+            }
+
+            const { uploadUrl, fileUrl } = await presignRes.json()
+            onProgress("uploading", 30)
+
+            // Step 1b: Upload directly to R2 (bypasses Vercel body limit)
+            const uploadRes = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: { "Content-Type": resolvedType },
                 body: file,
             })
 
             if (!uploadRes.ok) {
-                const err = await uploadRes.json()
-                throw new Error(err.error || "Upload failed")
+                throw new Error(`Direct upload failed: ${uploadRes.status}`)
             }
 
-            const { docUrl, fileType } = await uploadRes.json()
+            const docUrl = fileUrl
             onProgress("analyzing", 50)
             toast.info("AI is analyzing your document...")
 
@@ -448,7 +462,7 @@ export default function WorkspacePage() {
                 body: JSON.stringify({
                     docUrl,
                     fileName: file.name.replace(/\.[^.]+$/, ""),
-                    fileType: fileType || file.type,
+                    fileType: resolvedType,
                 }),
             })
 
