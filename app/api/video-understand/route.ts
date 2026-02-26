@@ -162,6 +162,7 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`[Video] Analyzing: ${videoTitle || fileName || "Uploaded Video"}`)
+        console.log("Calling Gemini with video URL:", videoUrl)
 
         // Step 1: Try Gemini video analysis (direct video URL)
         let rawResult: string
@@ -216,6 +217,7 @@ Return ONLY valid JSON:
         }
 
         const result = parseJSON(rawResult)
+        console.log("Gemini raw result:", result)
         transcript = result.transcript || transcript || ""
 
         // Step 2: Generate TTS-friendly summary
@@ -271,6 +273,7 @@ Return ONLY valid JSON:
         const { data: userData } = await supabase.auth.getUser()
         
         if (userData?.user) {
+            console.log("Inserting video summary ID:", summaryId)
             const { data, error } = await supabase.from("summaries").insert({
                 id: summaryId,
                 user_id: userData.user.id,
@@ -289,9 +292,9 @@ Return ONLY valid JSON:
             })
 
             if (error) {
-                console.error("VIDEO INSERT ERROR:", error)
+                console.error("Supabase insert error:", error)
                 return NextResponse.json(
-                    { error: "Failed to save video summary", details: error },
+                    { error: error },
                     { status: 500 }
                 )
             }
@@ -318,8 +321,11 @@ Return ONLY valid JSON:
         console.log(`[Video] ✅ Done`)
         return NextResponse.json(response)
 
-    } catch (error: any) {
-        console.error("[Video] ❌ Error:", error.message)
-        return NextResponse.json({ error: error.message || "Failed to analyze video" }, { status: 500 })
+    } catch (err: any) {
+        console.error("VIDEO-UNDERSTAND CRASH:", err)
+        return NextResponse.json(
+            { error: "Video processing failed", details: String(err) },
+            { status: 500 }
+        )
     }
 }
