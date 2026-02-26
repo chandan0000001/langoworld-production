@@ -329,6 +329,7 @@ export default function WorkspacePage() {
                     videoTitle: file.name.replace(/\.[^.]+$/, ""),
                     fileName: file.name,
                     summaryId: summaryId,
+                    user_id: user.id,
                 }),
             })
 

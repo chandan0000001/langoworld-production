@@ -142,9 +142,13 @@ def video_understand():
     try:
         data = request.get_json()
         video_url = (data.get("video_url", "") if data else "").strip()
+        user_id = data.get("user_id") if data else None
 
         if not video_url:
             return jsonify({"error": "video_url is required"}), 400
+
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
 
         logging.info(f"[VideoUnderstand] Processing video: {video_url}")
 
@@ -167,7 +171,7 @@ def video_understand():
             "video_title": video_title,
             "channel": channel,
             "summary": summary_text,
-            "user_id": None,
+            "user_id": user_id,
             "video_url": video_url,
             "source": "upload",
         }
