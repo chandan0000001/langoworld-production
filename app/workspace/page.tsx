@@ -272,12 +272,8 @@ export default function WorkspacePage() {
         if (!user) return
         setUploadLoading(true)
 
-        const summaryId = (() => {
-            const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-            let id = ""
-            for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)]
-            return id
-        })()
+        // Generate a temporary upload path ID (separate from the summary ID which backend generates)
+        const uploadPathId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         try {
             // Phase 1: Get presigned URL
@@ -291,7 +287,7 @@ export default function WorkspacePage() {
                     filename: file.name,
                     contentType: file.type,
                     userId: user.id,
-                    summaryId: summaryId,
+                    summaryId: uploadPathId,
                 }),
             })
 
@@ -320,7 +316,7 @@ export default function WorkspacePage() {
             onProgress("analyzing", 50)
             toast.info("AI is analyzing your video...")
 
-            // Phase 2: Analyze with Gemini (pass summaryId to ensure consistency)
+            // Phase 2: Analyze with Gemini (backend generates summary ID and inserts to Supabase)
             const analyzeRes = await fetch("/api/video-understand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -328,7 +324,6 @@ export default function WorkspacePage() {
                     video_url: videoUrl,
                     videoTitle: file.name.replace(/\.[^.]+$/, ""),
                     fileName: file.name,
-                    summaryId: summaryId,
                     user_id: user.id,
                 }),
             })
@@ -341,9 +336,9 @@ export default function WorkspacePage() {
             const data = await analyzeRes.json()
             onProgress("analyzing", 80)
 
-            // Use the summaryId we generated, not the one from API (for consistency)
-            const finalId = summaryId
-            console.log("[Video Upload] Using summary ID:", finalId)
+            // Use the summaryPageId returned by backend (backend already inserted to Supabase)
+            const finalId = data.summaryPageId
+            console.log("[Video Upload] Using backend summary ID:", finalId)
 
             // Phase 3: Update upload result state (independent from YT)
             setUploadResult({
@@ -353,57 +348,12 @@ export default function WorkspacePage() {
                     explanation: data.explanation,
                 },
                 pageId: finalId,
-                pageUrl: `/video/summary/${finalId}`,
+                pageUrl: data.summaryPageUrl || `/video/summary/${finalId}`,
                 title: data.videoTitle || null,
             })
 
-            // Save to Supabase with the SAME ID
-            console.log("[Video Upload] Inserting to Supabase with ID:", finalId)
-            const { error: insertError } = await supabase.from("summaries").upsert({
-                id: finalId,
-                user_id: user.id,
-                video_url: videoUrl,
-                video_title: data.videoTitle || file.name,
-                channel: "Uploaded",
-                summary: data.summary || "",
-                key_points: data.keyPoints || [],
-                explanation: data.explanation || "",
-                tts_summary: data.ttsSummary || "",
-                transcript: data.transcript || "",
-                chapters: data.chapters || [],
-                source: "upload",
-                video_cdn_url: videoUrl,
-                created_at: new Date().toISOString(),
-            })
-
-            if (insertError) {
-                // ─── Robust error logging for Supabase/RLS debugging ───
-                console.error("[Supabase] Save error details:", {
-                    message: insertError.message,
-                    details: insertError.details,
-                    hint: insertError.hint,
-                    code: insertError.code,
-                    fullError: JSON.stringify(insertError, null, 2)
-                })
-                
-                // Check common RLS issues
-                if (insertError.code === "42501" || insertError.message?.includes("row-level security")) {
-                    console.error("[RLS] Policy violation - auth.uid() may not match user_id")
-                    console.error("[RLS] Current user.id:", user.id)
-                    toast.error("Permission denied - RLS policy blocked the insert")
-                } else if (insertError.code === "42703") {
-                    console.error("[Schema] Column does not exist")
-                    toast.error("Database schema mismatch")
-                } else if (insertError.code === "23503") {
-                    console.error("[FK] Foreign key violation - user may not exist in profiles table")
-                    toast.error("User profile not found")
-                } else {
-                    toast.error(`Save failed: ${insertError.message || "Unknown error"}`)
-                }
-            } else {
-                console.log("[Video Upload] ✅ Inserted video summary ID:", finalId)
-                await loadHistory(user.id)
-            }
+            // Reload history to reflect the new summary (backend already inserted)
+            await loadHistory(user.id)
 
             onProgress("done", 100)
             toast.success(`Video analyzed! ${data.keyPoints?.length || 0} key points found`)

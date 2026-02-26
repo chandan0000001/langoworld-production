@@ -496,7 +496,7 @@ export default function VideoSummaryPage() {
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
-                .maybeSingle()
+                .single()
 
             if (fetchError) {
                 console.error("[VideoSummary] Supabase fetch error:", fetchError)
