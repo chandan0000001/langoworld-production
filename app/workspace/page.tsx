@@ -325,7 +325,7 @@ export default function WorkspacePage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    videoUrl: videoUrl,
+                    video_url: videoUrl,
                     videoTitle: file.name.replace(/\.[^.]+$/, ""),
                     fileName: file.name,
                     summaryId: summaryId,
