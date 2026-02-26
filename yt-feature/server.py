@@ -129,6 +129,51 @@ def video_info():
     return jsonify(info)
 
 
+@app.route("/api/video-understand", methods=["POST"])
+def video_understand():
+    """
+    Process and analyze an uploaded video.
+
+    Body: { "video_url": "https://..." }
+    Returns: { "summary": "...", "keyPoints": [...], ... }
+    """
+    try:
+        data = request.get_json()
+        video_url = (data.get("video_url", "") if data else "").strip()
+
+        if not video_url:
+            return jsonify({"error": "video_url is required"}), 400
+
+        logging.info(f"[VideoUnderstand] Processing video: {video_url}")
+
+        # Dummy response for now — heavy processing to be added later
+        response = {
+            "summary": "This is a placeholder summary for the uploaded video.",
+            "keyPoints": [
+                {"timestamp": "0:00", "point": "Video starts"}
+            ],
+            "explanation": "Video analysis will be implemented here.",
+            "chapters": [
+                {"content": "Placeholder chapter content", "startTime": "0:00"}
+            ],
+            "transcript": "Transcript extraction pending implementation.",
+            "ttsSummary": "TTS summary placeholder.",
+            "summaryPageId": "placeholder-id",
+            "summaryPageUrl": "/video/summary/placeholder-id",
+            "videoTitle": "Uploaded Video",
+            "channel": "Video",
+            "source": "upload",
+            "videoAnalyzed": False,
+        }
+
+        logging.info(f"[VideoUnderstand] Returning dummy response for: {video_url}")
+        return jsonify(response)
+
+    except Exception as e:
+        logging.error(f"[VideoUnderstand] Error processing video: {e}")
+        return jsonify({"error": "Video processing failed", "details": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", os.getenv("TUBEINSIGHT_PORT", "5123")))
     is_production = os.getenv("RENDER") is not None
