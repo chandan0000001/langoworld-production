@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getNextApiKey } from "@/lib/api-key-rotation"
 import { queuedRequest, ApiError } from "@/lib/request-queue"
 import { generateSummaryId, saveSummary, type VideoSummaryData } from "@/lib/summary-store"
+import { createClient } from "@/lib/supabase-server"
 
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
@@ -263,7 +264,41 @@ Return ONLY valid JSON:
         }
         saveSummary(summaryData)
         console.log("Inserted VIDEO summary:", summaryId)
-        console.log(`[Video] ✅ Saved summary: ${summaryId}`)
+        console.log(`[Video] ✅ Saved to memory: ${summaryId}`)
+
+        // Step 4: Save to Supabase
+        const supabase = await createClient()
+        const { data: userData } = await supabase.auth.getUser()
+        
+        if (userData?.user) {
+            const { data, error } = await supabase.from("summaries").insert({
+                id: summaryId,
+                user_id: userData.user.id,
+                video_url: videoUrl,
+                video_title: videoTitle || fileName || "Uploaded Video",
+                channel: "Video",
+                summary: ensureString(result.summary),
+                key_points: summaryData.keyPoints,
+                explanation: ensureString(result.explanation),
+                tts_summary: ttsSummary,
+                transcript,
+                chapters: chaptersData,
+                source: "upload",
+                video_cdn_url: videoUrl,
+                created_at: new Date().toISOString(),
+            })
+
+            if (error) {
+                console.error("VIDEO INSERT ERROR:", error)
+                return NextResponse.json(
+                    { error: "Failed to save video summary", details: error },
+                    { status: 500 }
+                )
+            }
+            console.log(`[Video] ✅ Saved to Supabase: ${summaryId}`)
+        } else {
+            console.log(`[Video] ⚠ No authenticated user, skipping Supabase save`)
+        }
 
         const response = {
             summary: ensureString(result.summary),
