@@ -249,7 +249,7 @@ Return ONLY valid JSON:
             videoId: summaryId,
             videoUrl,
             videoTitle: videoTitle || fileName || "Uploaded Video",
-            channel: "Uploaded",
+            channel: "Video",
             summary: ensureString(result.summary),
             transcript,
             keyPoints: (result.keyPoints || []).map((kp: any) => ({
@@ -262,6 +262,7 @@ Return ONLY valid JSON:
             createdAt: new Date().toISOString(),
         }
         saveSummary(summaryData)
+        console.log("Inserted VIDEO summary:", summaryId)
         console.log(`[Video] ✅ Saved summary: ${summaryId}`)
 
         const response = {
@@ -274,7 +275,7 @@ Return ONLY valid JSON:
             summaryPageId: summaryId,
             summaryPageUrl: `/video/summary/${summaryId}`,
             videoTitle: videoTitle || fileName || "Uploaded Video",
-            channel: "Uploaded",
+            channel: "Video",
             source: "upload",
             videoAnalyzed: usedVideoAnalysis,
         }
