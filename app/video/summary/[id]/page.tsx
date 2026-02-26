@@ -504,18 +504,8 @@ export default function VideoSummaryPage() {
             console.log("[VideoSummary] Row returned:", row)
 
             if (fetchError || !row) {
-                // Fallback to API route (for in-memory summaries)
-                try {
-                    const res = await fetch(`/api/yt-summary/${id}`)
-                    if (!res.ok) throw new Error("not found")
-                    const json = await res.json()
-                    setData(json)
-                    originalDataRef.current = JSON.parse(JSON.stringify(json))
-                } catch {
-                    setError("Summary not found or has expired.")
-                } finally {
-                    setLoading(false)
-                }
+                setError("Summary not found or has expired.")
+                setLoading(false)
                 return
             }
 
