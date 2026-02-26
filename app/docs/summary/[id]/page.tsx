@@ -492,11 +492,18 @@ export default function DocSummaryPage() {
         async function load() {
             const supabase = createClient()
 
+            console.log("[DocSummary] Fetching summary for id:", id)
+
             const { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
-                .single()
+                .maybeSingle()
+
+            if (fetchError) {
+                console.error("[DocSummary] Supabase fetch error:", fetchError)
+            }
+            console.log("[DocSummary] Row returned:", row)
 
             if (fetchError || !row) {
                 try {

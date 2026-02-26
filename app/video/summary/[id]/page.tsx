@@ -490,11 +490,18 @@ export default function VideoSummaryPage() {
         async function load() {
             const supabase = createClient()
 
+            console.log("[VideoSummary] Fetching summary for id:", id)
+
             const { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
-                .single()
+                .maybeSingle()
+
+            if (fetchError) {
+                console.error("[VideoSummary] Supabase fetch error:", fetchError)
+            }
+            console.log("[VideoSummary] Row returned:", row)
 
             if (fetchError || !row) {
                 // Fallback to API route (for in-memory summaries)

@@ -509,12 +509,19 @@ export default function SummaryPage() {
         async function load() {
             const supabase = createClient()
 
+            console.log("[YTSummary] Fetching summary for id:", id)
+
             // Load summary from Supabase
             const { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
-                .single()
+                .maybeSingle()
+
+            if (fetchError) {
+                console.error("[YTSummary] Supabase fetch error:", fetchError)
+            }
+            console.log("[YTSummary] Row returned:", row)
 
             if (fetchError || !row) {
                 // Fallback to API route

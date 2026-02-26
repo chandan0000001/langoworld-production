@@ -320,7 +320,7 @@ export default function WorkspacePage() {
             onProgress("analyzing", 50)
             toast.info("AI is analyzing your video...")
 
-            // Phase 2: Analyze with Gemini
+            // Phase 2: Analyze with Gemini (pass summaryId to ensure consistency)
             const analyzeRes = await fetch("/api/video-understand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -328,6 +328,7 @@ export default function WorkspacePage() {
                     videoUrl: videoUrl,
                     videoTitle: file.name.replace(/\.[^.]+$/, ""),
                     fileName: file.name,
+                    summaryId: summaryId,
                 }),
             })
 
@@ -339,6 +340,10 @@ export default function WorkspacePage() {
             const data = await analyzeRes.json()
             onProgress("analyzing", 80)
 
+            // Use the summaryId we generated, not the one from API (for consistency)
+            const finalId = summaryId
+            console.log("[Video Upload] Using summary ID:", finalId)
+
             // Phase 3: Update upload result state (independent from YT)
             setUploadResult({
                 summary: {
@@ -346,14 +351,15 @@ export default function WorkspacePage() {
                     keyPoints: data.keyPoints,
                     explanation: data.explanation,
                 },
-                pageId: data.summaryPageId || null,
-                pageUrl: data.summaryPageUrl || null,
+                pageId: finalId,
+                pageUrl: `/video/summary/${finalId}`,
                 title: data.videoTitle || null,
             })
 
-            // Save to Supabase
+            // Save to Supabase with the SAME ID
+            console.log("[Video Upload] Inserting to Supabase with ID:", finalId)
             const { error: insertError } = await supabase.from("summaries").upsert({
-                id: data.summaryPageId,
+                id: finalId,
                 user_id: user.id,
                 video_url: videoUrl,
                 video_title: data.videoTitle || file.name,
@@ -394,6 +400,7 @@ export default function WorkspacePage() {
                     toast.error(`Save failed: ${insertError.message || "Unknown error"}`)
                 }
             } else {
+                console.log("[Video Upload] ✅ Inserted video summary ID:", finalId)
                 await loadHistory(user.id)
             }
 
