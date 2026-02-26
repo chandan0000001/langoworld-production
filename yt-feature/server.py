@@ -6,6 +6,8 @@ Runs as a local backend that the Next.js app calls.
 
 import os
 import logging
+import uuid
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -146,9 +148,51 @@ def video_understand():
 
         logging.info(f"[VideoUnderstand] Processing video: {video_url}")
 
-        # Dummy response for now — heavy processing to be added later
+        # Generate unique ID
+        summary_id = str(uuid.uuid4())
+        summary_text = "This is a placeholder summary for the uploaded video."
+        video_title = "Uploaded Video"
+        channel = "Video"
+
+        # Insert into Supabase
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+        if not supabase_url or not supabase_key:
+            logging.error("[VideoUnderstand] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+            return jsonify({"error": "Server configuration error"}), 500
+
+        insert_payload = {
+            "id": summary_id,
+            "video_title": video_title,
+            "channel": channel,
+            "summary": summary_text,
+            "user_id": None,
+            "video_url": video_url,
+            "source": "upload",
+        }
+
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+
+        supabase_insert_url = f"{supabase_url}/rest/v1/summaries"
+        logging.info(f"[VideoUnderstand] Inserting summary {summary_id} into Supabase")
+
+        insert_res = requests.post(supabase_insert_url, json=insert_payload, headers=headers)
+
+        if insert_res.status_code not in (200, 201):
+            logging.error(f"[VideoUnderstand] Supabase insert failed: {insert_res.status_code} {insert_res.text}")
+            return jsonify({"error": "Failed to save summary", "details": insert_res.text}), 500
+
+        logging.info(f"[VideoUnderstand] Successfully inserted summary {summary_id}")
+
+        # Build response
         response = {
-            "summary": "This is a placeholder summary for the uploaded video.",
+            "summary": summary_text,
             "keyPoints": [
                 {"timestamp": "0:00", "point": "Video starts"}
             ],
@@ -158,15 +202,15 @@ def video_understand():
             ],
             "transcript": "Transcript extraction pending implementation.",
             "ttsSummary": "TTS summary placeholder.",
-            "summaryPageId": "placeholder-id",
-            "summaryPageUrl": "/video/summary/placeholder-id",
-            "videoTitle": "Uploaded Video",
-            "channel": "Video",
+            "summaryPageId": summary_id,
+            "summaryPageUrl": f"/video/summary/{summary_id}",
+            "videoTitle": video_title,
+            "channel": channel,
             "source": "upload",
             "videoAnalyzed": False,
         }
 
-        logging.info(f"[VideoUnderstand] Returning dummy response for: {video_url}")
+        logging.info(f"[VideoUnderstand] Returning response for: {video_url}")
         return jsonify(response)
 
     except Exception as e:
