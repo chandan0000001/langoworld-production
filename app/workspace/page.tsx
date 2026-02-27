@@ -316,7 +316,7 @@ export default function WorkspacePage() {
             onProgress("analyzing", 50)
             toast.info("AI is analyzing your video...")
 
-            // Phase 2: Analyze with Gemini (backend generates summary ID and inserts to Supabase)
+            // Phase 2: Start async analysis job (backend returns job_id immediately)
             const analyzeRes = await fetch("/api/video-understand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -333,7 +333,56 @@ export default function WorkspacePage() {
                 throw new Error(err.error || "Analysis failed")
             }
 
-            const data = await analyzeRes.json()
+            const jobResponse = await analyzeRes.json()
+            
+            // Check if backend returned job_id (async mode) or direct result (legacy)
+            if (jobResponse.job_id && jobResponse.status === "processing") {
+                // Async mode: poll for completion
+                const jobId = jobResponse.job_id
+                const POLL_INTERVAL = 5000 // 5 seconds
+                const MAX_POLL_TIME = 5 * 60 * 1000 // 5 minutes
+                const startTime = Date.now()
+                
+                console.log(`[Video Upload] Started polling for job: ${jobId}`)
+                
+                // Poll for job completion
+                const pollForCompletion = async (): Promise<any> => {
+                    while (true) {
+                        // Check timeout
+                        if (Date.now() - startTime > MAX_POLL_TIME) {
+                            throw new Error("Processing took too long. Please try again.")
+                        }
+                        
+                        const statusRes = await fetch(`/api/video-status/${jobId}`)
+                        const statusData = await statusRes.json()
+                        
+                        if (!statusRes.ok && statusRes.status === 404) {
+                            throw new Error("Job not found. Please try again.")
+                        }
+                        
+                        if (statusData.status === "completed") {
+                            console.log(`[Video Upload] Job ${jobId} completed`)
+                            return statusData.data
+                        }
+                        
+                        if (statusData.status === "error") {
+                            throw new Error(statusData.message || "Video analysis failed")
+                        }
+                        
+                        // Status is "processing", continue polling
+                        console.log(`[Video Upload] Job ${jobId} still processing...`)
+                        onProgress("analyzing", Math.min(75, 50 + Math.floor((Date.now() - startTime) / MAX_POLL_TIME * 25)))
+                        
+                        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+                    }
+                }
+                
+                var data = await pollForCompletion()
+            } else {
+                // Legacy mode: direct result (fallback for backwards compatibility)
+                var data = jobResponse
+            }
+            
             onProgress("analyzing", 80)
 
             // Use the summaryPageId returned by backend (backend already inserted to Supabase)

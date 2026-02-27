@@ -10,6 +10,7 @@ import uuid
 import json
 import tempfile
 import time
+import threading
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -27,6 +28,9 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Global in-memory job storage for async video processing
+video_jobs = {}
 
 # All language codes supported by the LangoWorld project
 SUPPORTED_LANG_CODES = {
@@ -138,14 +142,12 @@ def video_info():
     return jsonify(info)
 
 
-@app.route("/api/video-understand", methods=["POST"])
-def video_understand():
+def process_video_job(job_id: str, video_url: str, user_id: str, video_title_input: str, file_name: str):
     """
-    Process and analyze an uploaded video using Gemini AI.
-
-    Body: { "video_url": "https://...", "user_id": "...", "videoTitle": "..." }
-    Returns: { "summary": "...", "keyPoints": [...], ... }
+    Background worker function to process video analysis.
+    Updates video_jobs[job_id] with status and result.
     """
+    global video_jobs
     temp_file_path = None
     uploaded_file = None
     start_time = time.time()
@@ -154,56 +156,33 @@ def video_understand():
         """Check if processing has exceeded max time."""
         return time.time() - start_time > MAX_PROCESSING_SECONDS
     
-    def timeout_response():
-        """Return timeout error response."""
-        return jsonify({
-            "status": "timeout",
-            "message": "Video processing took too long. Please try again later.",
-            "videoAnalyzed": False
-        }), 504
-    
-    def quota_response():
-        """Return quota exceeded error response."""
-        return jsonify({
-            "status": "quota_exceeded",
-            "message": "AI service temporarily unavailable. Please try again later."
-        }), 503
-    
     def is_quota_error(error):
         """Check if error is a quota/rate limit error."""
         error_str = str(error).lower()
         return "429" in error_str or "quota" in error_str or "rate limit" in error_str or "resource exhausted" in error_str
     
     try:
-        data = request.get_json()
-        video_url = (data.get("video_url", "") if data else "").strip()
-        user_id = data.get("user_id") if data else None
-        video_title_input = data.get("videoTitle", "Uploaded Video") if data else "Uploaded Video"
-        file_name = data.get("fileName", "video.mp4") if data else "video.mp4"
-
-        if not video_url:
-            return jsonify({"error": "video_url is required"}), 400
-
-        if not user_id:
-            return jsonify({"error": "user_id is required"}), 400
-
-        logging.info(f"[VideoUnderstand] Processing video: {video_url}")
+        logging.info(f"[VideoJob {job_id}] Processing video: {video_url}")
 
         # ─── Configure Gemini ───
         gemini_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
-            logging.error("[VideoUnderstand] Missing GOOGLE_API_KEY or GEMINI_API_KEY")
-            return jsonify({"error": "AI service not configured"}), 500
+            logging.error(f"[VideoJob {job_id}] Missing GOOGLE_API_KEY or GEMINI_API_KEY")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "AI service not configured"
+            return
 
         genai.configure(api_key=gemini_api_key)
 
         # ─── Download video to temp file ───
-        logging.info("[VideoUnderstand] Downloading video from R2...")
+        logging.info(f"[VideoJob {job_id}] Downloading video from R2...")
         
         video_response = requests.get(video_url, stream=True, timeout=120)
         if video_response.status_code != 200:
-            logging.error(f"[VideoUnderstand] Failed to download video: {video_response.status_code}")
-            return jsonify({"error": "Failed to download video from CDN"}), 500
+            logging.error(f"[VideoJob {job_id}] Failed to download video: {video_response.status_code}")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Failed to download video from CDN"
+            return
 
         # Determine mime type from content-type header or file extension
         content_type = video_response.headers.get("content-type", "video/mp4")
@@ -229,15 +208,17 @@ def video_understand():
                 temp_file.write(chunk)
             temp_file_path = temp_file.name
         
-        logging.info(f"[VideoUnderstand] Downloaded to temp file: {temp_file_path} ({mime_type})")
+        logging.info(f"[VideoJob {job_id}] Downloaded to temp file: {temp_file_path} ({mime_type})")
 
         # ─── Check timeout before Gemini upload ───
         if check_timeout():
-            logging.warning("[VideoUnderstand] Timeout before Gemini upload")
-            return timeout_response()
+            logging.warning(f"[VideoJob {job_id}] Timeout before Gemini upload")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Video processing took too long. Please try again later."
+            return
 
         # ─── Upload to Gemini File API ───
-        logging.info("[VideoUnderstand] Uploading video to Gemini File API...")
+        logging.info(f"[VideoJob {job_id}] Uploading video to Gemini File API...")
         
         try:
             uploaded_file = genai.upload_file(
@@ -247,11 +228,13 @@ def video_understand():
             )
         except Exception as upload_error:
             if is_quota_error(upload_error):
-                logging.error(f"[VideoUnderstand] Quota exceeded during upload: {upload_error}")
-                return quota_response()
+                logging.error(f"[VideoJob {job_id}] Quota exceeded during upload: {upload_error}")
+                video_jobs[job_id]["status"] = "error"
+                video_jobs[job_id]["error"] = "AI service temporarily unavailable. Please try again later."
+                return
             raise
         
-        logging.info(f"[VideoUnderstand] Upload started: {uploaded_file.name}")
+        logging.info(f"[VideoJob {job_id}] Upload started: {uploaded_file.name}")
 
         # Wait for file to be processed (with timeout)
         max_wait_seconds = 300  # 5 minutes max
@@ -261,14 +244,18 @@ def video_understand():
         while uploaded_file.state.name == "PROCESSING":
             # Check global processing timeout
             if check_timeout():
-                logging.warning("[VideoUnderstand] Global timeout during Gemini processing")
-                return timeout_response()
+                logging.warning(f"[VideoJob {job_id}] Global timeout during Gemini processing")
+                video_jobs[job_id]["status"] = "error"
+                video_jobs[job_id]["error"] = "Video processing took too long. Please try again later."
+                return
             
             if total_waited >= max_wait_seconds:
-                logging.error("[VideoUnderstand] Video processing timed out")
-                return timeout_response()
+                logging.error(f"[VideoJob {job_id}] Video processing timed out")
+                video_jobs[job_id]["status"] = "error"
+                video_jobs[job_id]["error"] = "Video processing took too long. Please try again later."
+                return
             
-            logging.info(f"[VideoUnderstand] Waiting for video processing... ({total_waited}s)")
+            logging.info(f"[VideoJob {job_id}] Waiting for video processing... ({total_waited}s)")
             time.sleep(wait_interval)
             total_waited += wait_interval
             
@@ -276,23 +263,29 @@ def video_understand():
                 uploaded_file = genai.get_file(uploaded_file.name)
             except Exception as get_file_error:
                 if is_quota_error(get_file_error):
-                    logging.error(f"[VideoUnderstand] Quota exceeded during file check: {get_file_error}")
-                    return quota_response()
+                    logging.error(f"[VideoJob {job_id}] Quota exceeded during file check: {get_file_error}")
+                    video_jobs[job_id]["status"] = "error"
+                    video_jobs[job_id]["error"] = "AI service temporarily unavailable. Please try again later."
+                    return
                 raise
 
         if uploaded_file.state.name == "FAILED":
-            logging.error(f"[VideoUnderstand] Video processing failed: {uploaded_file.state.name}")
-            return jsonify({"error": "Video processing failed on AI server"}), 500
+            logging.error(f"[VideoJob {job_id}] Video processing failed: {uploaded_file.state.name}")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Video processing failed on AI server"
+            return
 
-        logging.info(f"[VideoUnderstand] Video ready: {uploaded_file.state.name}")
+        logging.info(f"[VideoJob {job_id}] Video ready: {uploaded_file.state.name}")
 
         # ─── Check timeout before analysis ───
         if check_timeout():
-            logging.warning("[VideoUnderstand] Timeout before Gemini analysis")
-            return timeout_response()
+            logging.warning(f"[VideoJob {job_id}] Timeout before Gemini analysis")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Video processing took too long. Please try again later."
+            return
 
         # ─── Analyze with Gemini ───
-        logging.info("[VideoUnderstand] Analyzing video with Gemini 2.5 Flash...")
+        logging.info(f"[VideoJob {job_id}] Analyzing video with Gemini 2.5 Flash...")
         
         model = genai.GenerativeModel("gemini-2.5-flash")
         
@@ -331,17 +324,21 @@ Rules:
             )
         except Exception as gen_error:
             if is_quota_error(gen_error):
-                logging.error(f"[VideoUnderstand] Quota exceeded during analysis: {gen_error}")
-                return quota_response()
+                logging.error(f"[VideoJob {job_id}] Quota exceeded during analysis: {gen_error}")
+                video_jobs[job_id]["status"] = "error"
+                video_jobs[job_id]["error"] = "AI service temporarily unavailable. Please try again later."
+                return
             raise
 
         # ─── Check timeout after analysis ───
         if check_timeout():
-            logging.warning("[VideoUnderstand] Timeout after Gemini analysis")
-            return timeout_response()
+            logging.warning(f"[VideoJob {job_id}] Timeout after Gemini analysis")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Video processing took too long. Please try again later."
+            return
 
         raw_response = response.text
-        logging.info(f"[VideoUnderstand] Got {len(raw_response)} chars from Gemini")
+        logging.info(f"[VideoJob {job_id}] Got {len(raw_response)} chars from Gemini")
 
         # ─── Parse JSON response ───
         def parse_gemini_json(raw: str) -> dict:
@@ -391,7 +388,7 @@ Rules:
                             pass
             
             # Fallback: return parsed summary from raw text
-            logging.warning("[VideoUnderstand] JSON parse failed, using fallback")
+            logging.warning(f"[VideoJob {job_id}] JSON parse failed, using fallback")
             return {
                 "summary": cleaned[:2000] if len(cleaned) > 100 else "Video analysis completed but response parsing failed.",
                 "keyPoints": [{"timestamp": "0:00", "point": "Video content analyzed"}],
@@ -408,11 +405,11 @@ Rules:
         chapters = result.get("chapters", [{"content": summary_text, "startTime": "0:00"}])
 
         # Generate TTS-friendly summary
-        logging.info("[VideoUnderstand] Generating TTS summary...")
+        logging.info(f"[VideoJob {job_id}] Generating TTS summary...")
         try:
             # Check timeout before TTS generation
             if check_timeout():
-                logging.warning("[VideoUnderstand] Timeout before TTS generation, using original summary")
+                logging.warning(f"[VideoJob {job_id}] Timeout before TTS generation, using original summary")
                 tts_summary = summary_text
             else:
                 tts_response = model.generate_content(
@@ -428,12 +425,14 @@ Summary to rewrite:
                     )
                 )
                 tts_summary = tts_response.text.strip()
-                logging.info(f"[VideoUnderstand] TTS summary: {len(tts_summary)} chars")
+                logging.info(f"[VideoJob {job_id}] TTS summary: {len(tts_summary)} chars")
         except Exception as tts_error:
             if is_quota_error(tts_error):
-                logging.error(f"[VideoUnderstand] Quota exceeded during TTS: {tts_error}")
-                return quota_response()
-            logging.warning(f"[VideoUnderstand] TTS summary failed: {tts_error}")
+                logging.error(f"[VideoJob {job_id}] Quota exceeded during TTS: {tts_error}")
+                video_jobs[job_id]["status"] = "error"
+                video_jobs[job_id]["error"] = "AI service temporarily unavailable. Please try again later."
+                return
+            logging.warning(f"[VideoJob {job_id}] TTS summary failed: {tts_error}")
             tts_summary = summary_text
 
         # ─── Generate unique ID and prepare Supabase insert ───
@@ -444,8 +443,10 @@ Summary to rewrite:
         supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
         if not supabase_url or not supabase_key:
-            logging.error("[VideoUnderstand] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
-            return jsonify({"error": "Database configuration error"}), 500
+            logging.error(f"[VideoJob {job_id}] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = "Database configuration error"
+            return
 
         # Format chapters for storage
         chapters_data = []
@@ -482,18 +483,20 @@ Summary to rewrite:
         }
 
         supabase_insert_url = f"{supabase_url}/rest/v1/summaries"
-        logging.info(f"[VideoUnderstand] Inserting AI summary {summary_id} into Supabase")
+        logging.info(f"[VideoJob {job_id}] Inserting AI summary {summary_id} into Supabase")
 
         insert_res = requests.post(supabase_insert_url, json=insert_payload, headers=headers)
 
         if insert_res.status_code not in (200, 201):
-            logging.error(f"[VideoUnderstand] Supabase insert failed: {insert_res.status_code} {insert_res.text}")
-            return jsonify({"error": "Failed to save summary", "details": insert_res.text}), 500
+            logging.error(f"[VideoJob {job_id}] Supabase insert failed: {insert_res.status_code} {insert_res.text}")
+            video_jobs[job_id]["status"] = "error"
+            video_jobs[job_id]["error"] = f"Failed to save summary: {insert_res.text}"
+            return
 
-        logging.info(f"[VideoUnderstand] ✅ Successfully saved AI summary {summary_id}")
+        logging.info(f"[VideoJob {job_id}] ✅ Successfully saved AI summary {summary_id}")
 
-        # ─── Build response ───
-        response = {
+        # ─── Build final response ───
+        final_response = {
             "summary": summary_text,
             "keyPoints": key_points,
             "explanation": explanation,
@@ -508,31 +511,125 @@ Summary to rewrite:
             "videoAnalyzed": True,
         }
 
-        logging.info(f"[VideoUnderstand] ✅ Returning AI analysis for: {video_url}")
-        return jsonify(response)
+        # Mark job as completed
+        video_jobs[job_id]["status"] = "completed"
+        video_jobs[job_id]["result"] = final_response
+        logging.info(f"[VideoJob {job_id}] ✅ Job completed successfully for: {video_url}")
 
     except Exception as e:
-        logging.error(f"[VideoUnderstand] Error processing video: {e}")
+        logging.error(f"[VideoJob {job_id}] Error processing video: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": "Video processing failed", "details": str(e)}), 500
+        video_jobs[job_id]["status"] = "error"
+        video_jobs[job_id]["error"] = str(e)
     
     finally:
         # Cleanup: delete temp file
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
-                logging.info(f"[VideoUnderstand] Cleaned up temp file: {temp_file_path}")
+                logging.info(f"[VideoJob {job_id}] Cleaned up temp file: {temp_file_path}")
             except Exception as cleanup_error:
-                logging.warning(f"[VideoUnderstand] Failed to cleanup temp file: {cleanup_error}")
+                logging.warning(f"[VideoJob {job_id}] Failed to cleanup temp file: {cleanup_error}")
         
         # Cleanup: delete uploaded file from Gemini
         if uploaded_file:
             try:
                 genai.delete_file(uploaded_file.name)
-                logging.info(f"[VideoUnderstand] Cleaned up Gemini file: {uploaded_file.name}")
+                logging.info(f"[VideoJob {job_id}] Cleaned up Gemini file: {uploaded_file.name}")
             except Exception as cleanup_error:
-                logging.warning(f"[VideoUnderstand] Failed to cleanup Gemini file: {cleanup_error}")
+                logging.warning(f"[VideoJob {job_id}] Failed to cleanup Gemini file: {cleanup_error}")
+
+
+@app.route("/api/video-understand", methods=["POST"])
+def video_understand():
+    """
+    Process and analyze an uploaded video using Gemini AI (async).
+
+    Body: { "video_url": "https://...", "user_id": "...", "videoTitle": "..." }
+    Returns: { "job_id": "...", "status": "processing" }
+    """
+    global video_jobs
+    
+    try:
+        data = request.get_json()
+        video_url = (data.get("video_url", "") if data else "").strip()
+        user_id = data.get("user_id") if data else None
+        video_title_input = data.get("videoTitle", "Uploaded Video") if data else "Uploaded Video"
+        file_name = data.get("fileName", "video.mp4") if data else "video.mp4"
+
+        if not video_url:
+            return jsonify({"error": "video_url is required"}), 400
+
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
+
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
+        
+        # Initialize job in global store
+        video_jobs[job_id] = {
+            "status": "processing",
+            "result": None,
+            "error": None
+        }
+        
+        # Start background processing thread
+        thread = threading.Thread(
+            target=process_video_job,
+            args=(job_id, video_url, user_id, video_title_input, file_name)
+        )
+        thread.start()
+        
+        logging.info(f"[VideoUnderstand] Started job {job_id} for video: {video_url}")
+        
+        # Return immediately with job ID
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing"
+        })
+
+    except Exception as e:
+        logging.error(f"[VideoUnderstand] Error starting video job: {e}")
+        return jsonify({"error": "Failed to start video processing", "details": str(e)}), 500
+
+
+@app.route("/api/video-status/<job_id>", methods=["GET"])
+def video_status(job_id):
+    """
+    Check the status of an async video processing job.
+
+    Returns:
+    - 404 if job not found
+    - { "status": "processing" } if still running
+    - { "status": "completed", "data": {...} } if finished
+    - { "status": "error", "message": "..." } if failed
+    """
+    global video_jobs
+    
+    if job_id not in video_jobs:
+        return jsonify({"error": "Job not found"}), 404
+    
+    job = video_jobs[job_id]
+    status = job["status"]
+    
+    if status == "processing":
+        return jsonify({"status": "processing"})
+    
+    elif status == "completed":
+        return jsonify({
+            "status": "completed",
+            "data": job["result"]
+        })
+    
+    elif status == "error":
+        return jsonify({
+            "status": "error",
+            "message": job["error"]
+        })
+    
+    # Fallback
+    return jsonify({"status": status})
 
 
 if __name__ == "__main__":
