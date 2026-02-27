@@ -490,13 +490,27 @@ export default function VideoSummaryPage() {
         async function load() {
             const supabase = createClient()
 
-            console.log("[VideoSummary] Fetching summary for id:", id)
+            console.log("[VideoSummary] Fetching summary for id/slug:", id)
 
-            const { data: row, error: fetchError } = await supabase
+            // First try to find by id
+            let { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
-                .single()
+                .maybeSingle()
+
+            // If not found by id, try by slug
+            if (!row && !fetchError) {
+                console.log("[VideoSummary] Not found by id, trying slug...")
+                const slugResult = await supabase
+                    .from("summaries")
+                    .select("*")
+                    .eq("slug", id)
+                    .maybeSingle()
+                
+                row = slugResult.data
+                fetchError = slugResult.error
+            }
 
             if (fetchError) {
                 console.error("[VideoSummary] Supabase fetch error:", fetchError)

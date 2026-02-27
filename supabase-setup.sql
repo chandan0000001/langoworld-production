@@ -50,12 +50,14 @@ CREATE TABLE IF NOT EXISTS public.summaries (
     chapters JSONB DEFAULT '[]',
     source TEXT DEFAULT 'youtube',  -- 'youtube' | 'upload' | 'document'
     video_cdn_url TEXT DEFAULT '',   -- R2 CDN URL for uploaded videos
+    slug TEXT UNIQUE,                -- Custom URL slug (optional, unique if set)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Add missing columns if table already exists (run this if you have existing data)
 -- ALTER TABLE public.summaries ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'youtube';
 -- ALTER TABLE public.summaries ADD COLUMN IF NOT EXISTS video_cdn_url TEXT DEFAULT '';
+-- ALTER TABLE public.summaries ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE;
 
 
 -- ═══════════════════════════════════════════════════════════

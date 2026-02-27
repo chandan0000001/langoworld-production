@@ -509,14 +509,27 @@ export default function SummaryPage() {
         async function load() {
             const supabase = createClient()
 
-            console.log("[YTSummary] Fetching summary for id:", id)
+            console.log("[YTSummary] Fetching summary for id/slug:", id)
 
-            // Load summary from Supabase
-            const { data: row, error: fetchError } = await supabase
+            // First try to find by id
+            let { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
                 .maybeSingle()
+
+            // If not found by id, try by slug
+            if (!row && !fetchError) {
+                console.log("[YTSummary] Not found by id, trying slug...")
+                const slugResult = await supabase
+                    .from("summaries")
+                    .select("*")
+                    .eq("slug", id)
+                    .maybeSingle()
+                
+                row = slugResult.data
+                fetchError = slugResult.error
+            }
 
             if (fetchError) {
                 console.error("[YTSummary] Supabase fetch error:", fetchError)

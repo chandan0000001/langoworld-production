@@ -492,13 +492,27 @@ export default function DocSummaryPage() {
         async function load() {
             const supabase = createClient()
 
-            console.log("[DocSummary] Fetching summary for id:", id)
+            console.log("[DocSummary] Fetching summary for id/slug:", id)
 
-            const { data: row, error: fetchError } = await supabase
+            // First try to find by id
+            let { data: row, error: fetchError } = await supabase
                 .from("summaries")
                 .select("*")
                 .eq("id", id)
                 .maybeSingle()
+
+            // If not found by id, try by slug
+            if (!row && !fetchError) {
+                console.log("[DocSummary] Not found by id, trying slug...")
+                const slugResult = await supabase
+                    .from("summaries")
+                    .select("*")
+                    .eq("slug", id)
+                    .maybeSingle()
+                
+                row = slugResult.data
+                fetchError = slugResult.error
+            }
 
             if (fetchError) {
                 console.error("[DocSummary] Supabase fetch error:", fetchError)
