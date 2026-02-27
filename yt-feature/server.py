@@ -437,15 +437,15 @@ Rules:
                 tts_summary = summary_text
             else:
                 tts_response = model.generate_content(
-                    f"""Generate a concise spoken summary between 20 and 30 words based strictly on the provided summary.
-Do not add greetings, storytelling tone, or filler phrases.
-Keep it professional, direct, and factual.
+                    f"""Generate a cinematic highlight-style spoken summary between 30 and 35 words based strictly on the provided summary.
+Do not use greetings, filler language, or casual tone.
+Make it expressive, impactful, and professional, suitable for a short narrated highlight.
 
 Summary:
 {summary_text}""",
                     generation_config=genai.GenerationConfig(
-                        max_output_tokens=100,
-                        temperature=0.5,
+                        max_output_tokens=1000,
+                        temperature=0.7,
                     )
                 )
                 tts_summary = tts_response.text.strip()
