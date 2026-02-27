@@ -12,7 +12,22 @@ const GEMINI_MODEL = "gemini-2.5-flash"
 // ─── Ensure String Helper (handles AI returning objects instead of strings) ───
 
 function ensureString(val: unknown): string {
-    if (typeof val === "string") return val
+    if (typeof val === "string") {
+        // Check if the string is actually JSON (double-encoded response)
+        const trimmed = val.trim()
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                const parsed = JSON.parse(trimmed)
+                // If parsed has a summary field, extract it
+                if (parsed && typeof parsed.summary === "string") return parsed.summary
+                if (parsed && typeof parsed.content === "string") return parsed.content
+                if (parsed && typeof parsed.text === "string") return parsed.text
+            } catch {
+                // Not valid JSON, return as plain string
+            }
+        }
+        return val
+    }
     if (val === null || val === undefined) return ""
     if (typeof val === "object") {
         const obj = val as Record<string, unknown>
