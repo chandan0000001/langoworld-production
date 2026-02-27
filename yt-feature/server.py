@@ -7,10 +7,14 @@ Runs as a local backend that the Next.js app calls.
 import os
 import logging
 import uuid
+import json
+import tempfile
+import time
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 from services.youtube import get_video_id, get_video_info
 from services.transcript import get_youtube_transcript
@@ -134,15 +138,20 @@ def video_info():
 @app.route("/api/video-understand", methods=["POST"])
 def video_understand():
     """
-    Process and analyze an uploaded video.
+    Process and analyze an uploaded video using Gemini AI.
 
-    Body: { "video_url": "https://..." }
+    Body: { "video_url": "https://...", "user_id": "...", "videoTitle": "..." }
     Returns: { "summary": "...", "keyPoints": [...], ... }
     """
+    temp_file_path = None
+    uploaded_file = None
+    
     try:
         data = request.get_json()
         video_url = (data.get("video_url", "") if data else "").strip()
         user_id = data.get("user_id") if data else None
+        video_title_input = data.get("videoTitle", "Uploaded Video") if data else "Uploaded Video"
+        file_name = data.get("fileName", "video.mp4") if data else "video.mp4"
 
         if not video_url:
             return jsonify({"error": "video_url is required"}), 400
@@ -152,27 +161,241 @@ def video_understand():
 
         logging.info(f"[VideoUnderstand] Processing video: {video_url}")
 
-        # Generate unique ID
-        summary_id = str(uuid.uuid4())
-        summary_text = "This is a placeholder summary for the uploaded video."
-        video_title = "Uploaded Video"
-        channel = "Video"
+        # ─── Configure Gemini ───
+        gemini_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            logging.error("[VideoUnderstand] Missing GOOGLE_API_KEY or GEMINI_API_KEY")
+            return jsonify({"error": "AI service not configured"}), 500
 
-        # Insert into Supabase
+        genai.configure(api_key=gemini_api_key)
+
+        # ─── Download video to temp file ───
+        logging.info("[VideoUnderstand] Downloading video from R2...")
+        
+        video_response = requests.get(video_url, stream=True, timeout=120)
+        if video_response.status_code != 200:
+            logging.error(f"[VideoUnderstand] Failed to download video: {video_response.status_code}")
+            return jsonify({"error": "Failed to download video from CDN"}), 500
+
+        # Determine mime type from content-type header or file extension
+        content_type = video_response.headers.get("content-type", "video/mp4")
+        if ";" in content_type:
+            content_type = content_type.split(";")[0].strip()
+        
+        # Map common extensions to mime types
+        ext = file_name.split(".")[-1].lower() if "." in file_name else "mp4"
+        mime_map = {
+            "mp4": "video/mp4",
+            "webm": "video/webm",
+            "mov": "video/quicktime",
+            "avi": "video/x-msvideo",
+            "mkv": "video/x-matroska",
+            "m4v": "video/mp4",
+        }
+        mime_type = mime_map.get(ext, content_type)
+
+        # Save to temp file
+        suffix = f".{ext}" if ext else ".mp4"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            for chunk in video_response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
+            temp_file_path = temp_file.name
+        
+        logging.info(f"[VideoUnderstand] Downloaded to temp file: {temp_file_path} ({mime_type})")
+
+        # ─── Upload to Gemini File API ───
+        logging.info("[VideoUnderstand] Uploading video to Gemini File API...")
+        
+        uploaded_file = genai.upload_file(
+            path=temp_file_path,
+            mime_type=mime_type,
+            display_name=video_title_input
+        )
+        
+        logging.info(f"[VideoUnderstand] Upload started: {uploaded_file.name}")
+
+        # Wait for file to be processed (with timeout)
+        max_wait_seconds = 300  # 5 minutes max
+        wait_interval = 5
+        total_waited = 0
+        
+        while uploaded_file.state.name == "PROCESSING":
+            if total_waited >= max_wait_seconds:
+                logging.error("[VideoUnderstand] Video processing timed out")
+                return jsonify({"error": "Video processing timed out"}), 504
+            
+            logging.info(f"[VideoUnderstand] Waiting for video processing... ({total_waited}s)")
+            time.sleep(wait_interval)
+            total_waited += wait_interval
+            uploaded_file = genai.get_file(uploaded_file.name)
+
+        if uploaded_file.state.name == "FAILED":
+            logging.error(f"[VideoUnderstand] Video processing failed: {uploaded_file.state.name}")
+            return jsonify({"error": "Video processing failed on AI server"}), 500
+
+        logging.info(f"[VideoUnderstand] Video ready: {uploaded_file.state.name}")
+
+        # ─── Analyze with Gemini ───
+        logging.info("[VideoUnderstand] Analyzing video with Gemini 2.5 Flash...")
+        
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        
+        analysis_prompt = f"""You are an expert video analyst. Analyze this uploaded video thoroughly.
+
+Video title: {video_title_input}
+
+Return ONLY valid JSON (no markdown, no code blocks, no extra text):
+{{
+  "summary": "2-3 paragraph comprehensive summary of the video content",
+  "keyPoints": [
+    {{ "timestamp": "M:SS", "point": "description of key moment or topic" }}
+  ],
+  "explanation": "3-5 paragraph conversational explanation as if you're a personal tutor explaining the video to someone",
+  "chapters": [
+    {{ "content": "detailed description of this section", "startTime": "M:SS" }}
+  ]
+}}
+
+Rules:
+- Provide 5-10 key points with estimated timestamps spread across the video
+- Use "M:SS" format for timestamps (e.g. "0:00", "1:30", "5:45")
+- Create 3-5 chapters covering major sections of the video
+- Make the explanation engaging and educational
+- If the video has speech, include key quotes or topics discussed
+- If the video is visual (no speech), describe what happens visually
+- Everything must be in English"""
+
+        response = model.generate_content(
+            [uploaded_file, analysis_prompt],
+            generation_config=genai.GenerationConfig(
+                max_output_tokens=8000,
+                temperature=0.7,
+            )
+        )
+
+        raw_response = response.text
+        logging.info(f"[VideoUnderstand] Got {len(raw_response)} chars from Gemini")
+
+        # ─── Parse JSON response ───
+        def parse_gemini_json(raw: str) -> dict:
+            """Safely parse JSON from Gemini response."""
+            cleaned = raw.strip()
+            
+            # Remove markdown code fences
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned.rsplit("```", 1)[0]
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:].strip()
+            
+            cleaned = cleaned.strip()
+            
+            # Try direct parse
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                pass
+            
+            # Extract JSON object using brace matching
+            start_idx = cleaned.find("{")
+            if start_idx != -1:
+                depth = 0
+                end_idx = -1
+                for i in range(start_idx, len(cleaned)):
+                    if cleaned[i] == "{":
+                        depth += 1
+                    elif cleaned[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end_idx = i
+                            break
+                
+                if end_idx != -1:
+                    extracted = cleaned[start_idx:end_idx + 1]
+                    try:
+                        return json.loads(extracted)
+                    except json.JSONDecodeError:
+                        # Fix common issues
+                        fixed = extracted.replace(",]", "]").replace(",}", "}")
+                        try:
+                            return json.loads(fixed)
+                        except json.JSONDecodeError:
+                            pass
+            
+            # Fallback: return parsed summary from raw text
+            logging.warning("[VideoUnderstand] JSON parse failed, using fallback")
+            return {
+                "summary": cleaned[:2000] if len(cleaned) > 100 else "Video analysis completed but response parsing failed.",
+                "keyPoints": [{"timestamp": "0:00", "point": "Video content analyzed"}],
+                "explanation": cleaned if len(cleaned) > 100 else "Unable to parse detailed explanation.",
+                "chapters": [{"content": "Full video", "startTime": "0:00"}]
+            }
+
+        result = parse_gemini_json(raw_response)
+
+        # Extract values with safe defaults
+        summary_text = result.get("summary", "Video analysis completed.")
+        key_points = result.get("keyPoints", [{"timestamp": "0:00", "point": "Video analyzed"}])
+        explanation = result.get("explanation", summary_text)
+        chapters = result.get("chapters", [{"content": summary_text, "startTime": "0:00"}])
+
+        # Generate TTS-friendly summary
+        logging.info("[VideoUnderstand] Generating TTS summary...")
+        try:
+            tts_response = model.generate_content(
+                f"""Rewrite the following summary as if you're casually explaining it to a friend over coffee. 
+Make it perfect for text-to-speech: conversational, clear, no jargon, no bullet points. 
+Use natural pauses and transitions. Keep it under 500 words. Write in English.
+
+Summary to rewrite:
+{summary_text}""",
+                generation_config=genai.GenerationConfig(
+                    max_output_tokens=1000,
+                    temperature=0.8,
+                )
+            )
+            tts_summary = tts_response.text.strip()
+            logging.info(f"[VideoUnderstand] TTS summary: {len(tts_summary)} chars")
+        except Exception as tts_error:
+            logging.warning(f"[VideoUnderstand] TTS summary failed: {tts_error}")
+            tts_summary = summary_text
+
+        # ─── Generate unique ID and prepare Supabase insert ───
+        summary_id = str(uuid.uuid4())[:8]  # Short ID for cleaner URLs
+        video_title = video_title_input if video_title_input != "Uploaded Video" else f"Video {summary_id}"
+
         supabase_url = os.getenv("SUPABASE_URL")
         supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
         if not supabase_url or not supabase_key:
             logging.error("[VideoUnderstand] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
-            return jsonify({"error": "Server configuration error"}), 500
+            return jsonify({"error": "Database configuration error"}), 500
+
+        # Format chapters for storage
+        chapters_data = []
+        for i, ch in enumerate(chapters):
+            chapters_data.append({
+                "id": f"vid-ch-{i + 1}-{summary_id}",
+                "title": f"Part {i + 1}",
+                "content": f"<p>{ch.get('content', '').replace(chr(10), '</p><p>')}</p>",
+                "textContent": ch.get("content", ""),
+                "wordCount": len(ch.get("content", "").split()),
+                "startTime": ch.get("startTime", "0:00"),
+            })
 
         insert_payload = {
             "id": summary_id,
-            "video_title": video_title,
-            "channel": channel,
-            "summary": summary_text,
             "user_id": user_id,
             "video_url": video_url,
+            "video_title": video_title,
+            "channel": "Uploaded",
+            "summary": summary_text,
+            "key_points": key_points,
+            "explanation": explanation,
+            "tts_summary": tts_summary,
+            "transcript": "",  # No transcript for uploaded videos
+            "chapters": chapters_data,
             "source": "upload",
         }
 
@@ -184,7 +407,7 @@ def video_understand():
         }
 
         supabase_insert_url = f"{supabase_url}/rest/v1/summaries"
-        logging.info(f"[VideoUnderstand] Inserting summary {summary_id} into Supabase")
+        logging.info(f"[VideoUnderstand] Inserting AI summary {summary_id} into Supabase")
 
         insert_res = requests.post(supabase_insert_url, json=insert_payload, headers=headers)
 
@@ -192,34 +415,49 @@ def video_understand():
             logging.error(f"[VideoUnderstand] Supabase insert failed: {insert_res.status_code} {insert_res.text}")
             return jsonify({"error": "Failed to save summary", "details": insert_res.text}), 500
 
-        logging.info(f"[VideoUnderstand] Successfully inserted summary {summary_id}")
+        logging.info(f"[VideoUnderstand] ✅ Successfully saved AI summary {summary_id}")
 
-        # Build response
+        # ─── Build response ───
         response = {
             "summary": summary_text,
-            "keyPoints": [
-                {"timestamp": "0:00", "point": "Video starts"}
-            ],
-            "explanation": "Video analysis will be implemented here.",
-            "chapters": [
-                {"content": "Placeholder chapter content", "startTime": "0:00"}
-            ],
-            "transcript": "Transcript extraction pending implementation.",
-            "ttsSummary": "TTS summary placeholder.",
+            "keyPoints": key_points,
+            "explanation": explanation,
+            "chapters": chapters_data,
+            "transcript": "",
+            "ttsSummary": tts_summary,
             "summaryPageId": summary_id,
             "summaryPageUrl": f"/video/summary/{summary_id}",
             "videoTitle": video_title,
-            "channel": channel,
+            "channel": "Uploaded",
             "source": "upload",
-            "videoAnalyzed": False,
+            "videoAnalyzed": True,
         }
 
-        logging.info(f"[VideoUnderstand] Returning response for: {video_url}")
+        logging.info(f"[VideoUnderstand] ✅ Returning AI analysis for: {video_url}")
         return jsonify(response)
 
     except Exception as e:
         logging.error(f"[VideoUnderstand] Error processing video: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Video processing failed", "details": str(e)}), 500
+    
+    finally:
+        # Cleanup: delete temp file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                logging.info(f"[VideoUnderstand] Cleaned up temp file: {temp_file_path}")
+            except Exception as cleanup_error:
+                logging.warning(f"[VideoUnderstand] Failed to cleanup temp file: {cleanup_error}")
+        
+        # Cleanup: delete uploaded file from Gemini
+        if uploaded_file:
+            try:
+                genai.delete_file(uploaded_file.name)
+                logging.info(f"[VideoUnderstand] Cleaned up Gemini file: {uploaded_file.name}")
+            except Exception as cleanup_error:
+                logging.warning(f"[VideoUnderstand] Failed to cleanup Gemini file: {cleanup_error}")
 
 
 if __name__ == "__main__":
