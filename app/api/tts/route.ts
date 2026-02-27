@@ -3,15 +3,38 @@ import { getNextApiKey } from "@/lib/api-key-rotation"
 import { computeTextHash, getCachedAudio, storeAudioToR2 } from "@/lib/audio-storage"
 
 
-// ─── Text Chunking ───
+// ─── Text Chunking (optimized for Gemini TTS limits) ───
 
-function chunkText(text: string, maxLength: number = 5000): string[] {
+function chunkText(text: string, maxLength: number = 1500): string[] {
+    // If text is short enough, return as single chunk
+    if (text.length <= maxLength) {
+        return [text.trim()].filter(s => s.length > 0)
+    }
+
+    // Split by sentence boundaries first
     const sentences = text.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0)
     const chunks: string[] = []
     let currentChunk = ""
 
     for (const sentence of sentences) {
-        if (currentChunk.length + sentence.length > maxLength && currentChunk.length > 0) {
+        // If a single sentence exceeds maxLength, split it by commas/semicolons
+        if (sentence.length > maxLength) {
+            // First, push any accumulated chunk
+            if (currentChunk.trim().length > 0) {
+                chunks.push(currentChunk.trim())
+                currentChunk = ""
+            }
+            // Split long sentence by clause boundaries
+            const clauses = sentence.split(/(?<=[,;:])\s+/)
+            for (const clause of clauses) {
+                if (currentChunk.length + clause.length > maxLength && currentChunk.length > 0) {
+                    chunks.push(currentChunk.trim())
+                    currentChunk = clause
+                } else {
+                    currentChunk += (currentChunk ? " " : "") + clause
+                }
+            }
+        } else if (currentChunk.length + sentence.length > maxLength && currentChunk.length > 0) {
             chunks.push(currentChunk.trim())
             currentChunk = sentence
         } else {
@@ -23,10 +46,33 @@ function chunkText(text: string, maxLength: number = 5000): string[] {
         chunks.push(currentChunk.trim())
     }
 
-    return chunks
+    // Final safety: if any chunk still exceeds maxLength, hard-split it
+    const finalChunks: string[] = []
+    for (const chunk of chunks) {
+        if (chunk.length > maxLength) {
+            // Hard split at word boundaries
+            const words = chunk.split(/\s+/)
+            let tempChunk = ""
+            for (const word of words) {
+                if (tempChunk.length + word.length + 1 > maxLength && tempChunk.length > 0) {
+                    finalChunks.push(tempChunk.trim())
+                    tempChunk = word
+                } else {
+                    tempChunk += (tempChunk ? " " : "") + word
+                }
+            }
+            if (tempChunk.trim().length > 0) {
+                finalChunks.push(tempChunk.trim())
+            }
+        } else {
+            finalChunks.push(chunk)
+        }
+    }
+
+    return finalChunks.filter(s => s.length > 0)
 }
 
-// ─── Gemini TTS Generation ───
+// ─── Gemini TTS Generation (with robust error handling) ───
 
 async function generateTTSWithGemini(
     text: string,
@@ -39,7 +85,7 @@ async function generateTTSWithGemini(
     const model = "gemini-2.5-flash-preview-tts"
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-    console.log(`[TTS] Calling Gemini TTS API... (attempt ${retryCount + 1}/${maxRetries + 1})`)
+    console.log(`[TTS] Calling Gemini TTS API... (attempt ${retryCount + 1}/${maxRetries + 1}, text length: ${text.length} chars)`)
 
     try {
         const response = await fetch(url, {
@@ -65,6 +111,14 @@ async function generateTTSWithGemini(
 
         if (!response.ok) {
             const errorData = await response.text()
+            console.error(`[TTS] Gemini API error ${response.status}: ${errorData.substring(0, 500)}`)
+
+            // Handle 400 errors (bad request - usually text too long or invalid)
+            if (response.status === 400) {
+                console.error(`[TTS] 400 Bad Request - text may be too long (${text.length} chars)`)
+                console.error(`[TTS] Error details: ${errorData}`)
+                throw new Error(`Gemini TTS 400 error: ${errorData.substring(0, 200)}`)
+            }
 
             // Retry on 500 and 503 errors with exponential backoff
             if ((response.status === 500 || response.status === 503) && retryCount < maxRetries) {
@@ -74,7 +128,15 @@ async function generateTTSWithGemini(
                 return generateTTSWithGemini(text, language, retryCount + 1, maxRetries)
             }
 
-            throw new Error(`Gemini TTS API error: ${response.status} - ${errorData}`)
+            // Retry on 429 (rate limit) with longer backoff
+            if (response.status === 429 && retryCount < maxRetries) {
+                const delay = Math.pow(2, retryCount + 1) * 2000
+                console.log(`[TTS] Rate limited, retrying after ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+                return generateTTSWithGemini(text, language, retryCount + 1, maxRetries)
+            }
+
+            throw new Error(`Gemini TTS API error: ${response.status} - ${errorData.substring(0, 200)}`)
         }
 
         const data = await response.json()
@@ -109,7 +171,7 @@ async function generateTTSWithGemini(
 
         return { buffer: audioBuffer, mimeType }
     } catch (error) {
-        console.error("Gemini TTS error:", error)
+        console.error("[TTS] Gemini TTS error:", error)
         throw error
     }
 }
@@ -156,14 +218,22 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 24000, channels: numbe
     return buffer
 }
 
-// ─── Generate Audio (handles chunking + PCM→WAV) ───
+// ─── Generate Audio (handles chunking + PCM→WAV + merging) ───
 
 async function generateAudioForText(text: string, language: string): Promise<{ buffer: Buffer; mimeType: string }> {
-    const chunks = chunkText(text, 5000)
+    // Use smaller chunk size to avoid Gemini TTS 400 errors on long text
+    const MAX_CHUNK_SIZE = 1500
+    const chunks = chunkText(text, MAX_CHUNK_SIZE)
     let detectedMimeType = "audio/mpeg"
     let sampleRate = 24000
 
-    console.log(`[TTS] Generating audio for ${chunks.length} chunks`)
+    // Log chunk statistics
+    console.log(`[TTS] ─── Chunking Statistics ───`)
+    console.log(`[TTS] Total text length: ${text.length} chars`)
+    console.log(`[TTS] Chunk count: ${chunks.length}`)
+    chunks.forEach((chunk, i) => {
+        console.log(`[TTS]   Chunk ${i + 1}: ${chunk.length} chars`)
+    })
 
     if (chunks.length === 1) {
         const result = await generateTTSWithGemini(chunks[0], language)
@@ -181,26 +251,45 @@ async function generateAudioForText(text: string, language: string): Promise<{ b
             detectedMimeType = "audio/wav"
         }
 
-        console.log(`[TTS] Audio generated, size: ${audioBuffer.length} bytes, format: ${detectedMimeType}`)
+        console.log(`[TTS] ─── Final Audio ───`)
+        console.log(`[TTS] Format: ${detectedMimeType}`)
+        console.log(`[TTS] Size: ${audioBuffer.length} bytes`)
         return { buffer: audioBuffer, mimeType: detectedMimeType }
     } else {
+        console.log(`[TTS] Processing ${chunks.length} chunks sequentially...`)
         const audioChunks: Buffer[] = []
+        const chunkSizes: number[] = []
+
         for (let i = 0; i < chunks.length; i++) {
-            console.log(`[TTS] Processing chunk ${i + 1}/${chunks.length}`)
-            const result = await generateTTSWithGemini(chunks[i], language)
-            audioChunks.push(result.buffer)
-            if (i === 0) {
-                detectedMimeType = result.mimeType
-                if (detectedMimeType.includes("L16") || detectedMimeType.includes("pcm")) {
-                    const rateMatch = detectedMimeType.match(/rate=(\d+)/)
-                    if (rateMatch) {
-                        sampleRate = parseInt(rateMatch[1], 10)
+            console.log(`[TTS] Processing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`)
+            try {
+                const result = await generateTTSWithGemini(chunks[i], language)
+                audioChunks.push(result.buffer)
+                chunkSizes.push(result.buffer.length)
+                console.log(`[TTS]   → Generated ${result.buffer.length} bytes`)
+
+                if (i === 0) {
+                    detectedMimeType = result.mimeType
+                    if (detectedMimeType.includes("L16") || detectedMimeType.includes("pcm")) {
+                        const rateMatch = detectedMimeType.match(/rate=(\d+)/)
+                        if (rateMatch) {
+                            sampleRate = parseInt(rateMatch[1], 10)
+                        }
                     }
                 }
+            } catch (chunkError) {
+                console.error(`[TTS] Failed on chunk ${i + 1}: ${chunkError}`)
+                throw chunkError
             }
         }
 
         let combinedAudio = Buffer.concat(audioChunks) as Buffer
+        console.log(`[TTS] ─── Merge Statistics ───`)
+        console.log(`[TTS] Chunks merged: ${audioChunks.length}`)
+        chunkSizes.forEach((size, i) => {
+            console.log(`[TTS]   Chunk ${i + 1} audio: ${size} bytes`)
+        })
+        console.log(`[TTS] Combined size (before conversion): ${combinedAudio.length} bytes`)
 
         if (detectedMimeType.includes("L16") || detectedMimeType.includes("pcm")) {
             console.log(`[TTS] Converting PCM to WAV format (sample rate: ${sampleRate}Hz)`)
@@ -208,7 +297,10 @@ async function generateAudioForText(text: string, language: string): Promise<{ b
             detectedMimeType = "audio/wav"
         }
 
-        console.log(`[TTS] Audio generated, size: ${combinedAudio.length} bytes, format: ${detectedMimeType}`)
+        console.log(`[TTS] ─── Final Audio ───`)
+        console.log(`[TTS] Format: ${detectedMimeType}`)
+        console.log(`[TTS] Total merged size: ${combinedAudio.length} bytes`)
+
         return { buffer: combinedAudio, mimeType: detectedMimeType }
     }
 }
@@ -222,14 +314,14 @@ export async function POST(request: NextRequest) {
 
         if (!text || !language) {
             return NextResponse.json(
-                { error: "Text and language are required" },
+                { error: "Text and language are required", code: "MISSING_PARAMS" },
                 { status: 400 }
             )
         }
 
         if (text.length === 0) {
             return NextResponse.json(
-                { error: "Text cannot be empty" },
+                { error: "Text cannot be empty", code: "EMPTY_TEXT" },
                 { status: 400 }
             )
         }
@@ -239,14 +331,17 @@ export async function POST(request: NextRequest) {
             getNextApiKey()
         } catch {
             return NextResponse.json(
-                { error: "No Google API keys configured" },
+                { error: "No Google API keys configured", code: "NO_API_KEYS" },
                 { status: 500 }
             )
         }
 
         // ── Step 1: Compute deterministic hash of the text ──
         const textHash = computeTextHash(text)
-        console.log(`[TTS] Request: text="${text.substring(0, 60)}..." lang=${language} hash=${textHash} page=${pageId || "none"} section=${section || "none"}`)
+        console.log(`[TTS] ═══════════════════════════════════════════`)
+        console.log(`[TTS] Request: text length=${text.length} chars, lang=${language}`)
+        console.log(`[TTS] Hash: ${textHash}, page=${pageId || "none"}, section=${section || "none"}`)
+        console.log(`[TTS] Preview: "${text.substring(0, 80)}..."`)
 
         // ── Step 2: Check R2 cache via Supabase + R2 HEAD ──
         const cached = await getCachedAudio(textHash, language)
@@ -277,6 +372,7 @@ export async function POST(request: NextRequest) {
         })
 
         console.log(`[TTS] ✓ Stored to R2: ${stored.url}`)
+        console.log(`[TTS] ═══════════════════════════════════════════`)
 
         return NextResponse.json({
             audioUrl: stored.url,
@@ -286,9 +382,19 @@ export async function POST(request: NextRequest) {
             fileSize: stored.fileSize,
         })
     } catch (error) {
-        console.error("[TTS] Error:", error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error(`[TTS] ═══════════════════════════════════════════`)
+        console.error(`[TTS] ERROR: ${errorMessage}`)
+        console.error(`[TTS] Stack:`, error)
+        console.error(`[TTS] ═══════════════════════════════════════════`)
+
+        // Return structured error response
         return NextResponse.json(
-            { error: "An error occurred while generating audio" },
+            { 
+                error: "Failed to generate audio", 
+                code: "TTS_GENERATION_FAILED",
+                details: errorMessage.substring(0, 500)
+            },
             { status: 500 }
         )
     }
