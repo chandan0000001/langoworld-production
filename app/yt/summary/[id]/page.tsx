@@ -518,8 +518,8 @@ export default function SummaryPage() {
                 .eq("id", id)
                 .maybeSingle()
 
-            // If not found by id, try by slug
-            if (!row && !fetchError) {
+            // If not found by id (or UUID format error), try by slug
+            if (!row) {
                 console.log("[YTSummary] Not found by id, trying slug...")
                 const slugResult = await supabase
                     .from("summaries")
