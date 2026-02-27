@@ -44,6 +44,9 @@ LANG_CODE_MAP = {
 
 logging.basicConfig(level=logging.INFO, format="[TubeInsight] %(message)s")
 
+# Max time allowed for video processing pipeline (seconds)
+MAX_PROCESSING_SECONDS = 180
+
 
 @app.route("/api/health", methods=["GET"])
 def health():
@@ -145,6 +148,31 @@ def video_understand():
     """
     temp_file_path = None
     uploaded_file = None
+    start_time = time.time()
+    
+    def check_timeout():
+        """Check if processing has exceeded max time."""
+        return time.time() - start_time > MAX_PROCESSING_SECONDS
+    
+    def timeout_response():
+        """Return timeout error response."""
+        return jsonify({
+            "status": "timeout",
+            "message": "Video processing took too long. Please try again later.",
+            "videoAnalyzed": False
+        }), 504
+    
+    def quota_response():
+        """Return quota exceeded error response."""
+        return jsonify({
+            "status": "quota_exceeded",
+            "message": "AI service temporarily unavailable. Please try again later."
+        }), 503
+    
+    def is_quota_error(error):
+        """Check if error is a quota/rate limit error."""
+        error_str = str(error).lower()
+        return "429" in error_str or "quota" in error_str or "rate limit" in error_str or "resource exhausted" in error_str
     
     try:
         data = request.get_json()
@@ -203,14 +231,25 @@ def video_understand():
         
         logging.info(f"[VideoUnderstand] Downloaded to temp file: {temp_file_path} ({mime_type})")
 
+        # ─── Check timeout before Gemini upload ───
+        if check_timeout():
+            logging.warning("[VideoUnderstand] Timeout before Gemini upload")
+            return timeout_response()
+
         # ─── Upload to Gemini File API ───
         logging.info("[VideoUnderstand] Uploading video to Gemini File API...")
         
-        uploaded_file = genai.upload_file(
-            path=temp_file_path,
-            mime_type=mime_type,
-            display_name=video_title_input
-        )
+        try:
+            uploaded_file = genai.upload_file(
+                path=temp_file_path,
+                mime_type=mime_type,
+                display_name=video_title_input
+            )
+        except Exception as upload_error:
+            if is_quota_error(upload_error):
+                logging.error(f"[VideoUnderstand] Quota exceeded during upload: {upload_error}")
+                return quota_response()
+            raise
         
         logging.info(f"[VideoUnderstand] Upload started: {uploaded_file.name}")
 
@@ -220,20 +259,37 @@ def video_understand():
         total_waited = 0
         
         while uploaded_file.state.name == "PROCESSING":
+            # Check global processing timeout
+            if check_timeout():
+                logging.warning("[VideoUnderstand] Global timeout during Gemini processing")
+                return timeout_response()
+            
             if total_waited >= max_wait_seconds:
                 logging.error("[VideoUnderstand] Video processing timed out")
-                return jsonify({"error": "Video processing timed out"}), 504
+                return timeout_response()
             
             logging.info(f"[VideoUnderstand] Waiting for video processing... ({total_waited}s)")
             time.sleep(wait_interval)
             total_waited += wait_interval
-            uploaded_file = genai.get_file(uploaded_file.name)
+            
+            try:
+                uploaded_file = genai.get_file(uploaded_file.name)
+            except Exception as get_file_error:
+                if is_quota_error(get_file_error):
+                    logging.error(f"[VideoUnderstand] Quota exceeded during file check: {get_file_error}")
+                    return quota_response()
+                raise
 
         if uploaded_file.state.name == "FAILED":
             logging.error(f"[VideoUnderstand] Video processing failed: {uploaded_file.state.name}")
             return jsonify({"error": "Video processing failed on AI server"}), 500
 
         logging.info(f"[VideoUnderstand] Video ready: {uploaded_file.state.name}")
+
+        # ─── Check timeout before analysis ───
+        if check_timeout():
+            logging.warning("[VideoUnderstand] Timeout before Gemini analysis")
+            return timeout_response()
 
         # ─── Analyze with Gemini ───
         logging.info("[VideoUnderstand] Analyzing video with Gemini 2.5 Flash...")
@@ -265,13 +321,24 @@ Rules:
 - If the video is visual (no speech), describe what happens visually
 - Everything must be in English"""
 
-        response = model.generate_content(
-            [uploaded_file, analysis_prompt],
-            generation_config=genai.GenerationConfig(
-                max_output_tokens=8000,
-                temperature=0.7,
+        try:
+            response = model.generate_content(
+                [uploaded_file, analysis_prompt],
+                generation_config=genai.GenerationConfig(
+                    max_output_tokens=8000,
+                    temperature=0.7,
+                )
             )
-        )
+        except Exception as gen_error:
+            if is_quota_error(gen_error):
+                logging.error(f"[VideoUnderstand] Quota exceeded during analysis: {gen_error}")
+                return quota_response()
+            raise
+
+        # ─── Check timeout after analysis ───
+        if check_timeout():
+            logging.warning("[VideoUnderstand] Timeout after Gemini analysis")
+            return timeout_response()
 
         raw_response = response.text
         logging.info(f"[VideoUnderstand] Got {len(raw_response)} chars from Gemini")
@@ -343,21 +410,29 @@ Rules:
         # Generate TTS-friendly summary
         logging.info("[VideoUnderstand] Generating TTS summary...")
         try:
-            tts_response = model.generate_content(
-                f"""Rewrite the following summary as if you're casually explaining it to a friend over coffee. 
+            # Check timeout before TTS generation
+            if check_timeout():
+                logging.warning("[VideoUnderstand] Timeout before TTS generation, using original summary")
+                tts_summary = summary_text
+            else:
+                tts_response = model.generate_content(
+                    f"""Rewrite the following summary as if you're casually explaining it to a friend over coffee. 
 Make it perfect for text-to-speech: conversational, clear, no jargon, no bullet points. 
 Use natural pauses and transitions. Keep it under 500 words. Write in English.
 
 Summary to rewrite:
 {summary_text}""",
-                generation_config=genai.GenerationConfig(
-                    max_output_tokens=1000,
-                    temperature=0.8,
+                    generation_config=genai.GenerationConfig(
+                        max_output_tokens=1000,
+                        temperature=0.8,
+                    )
                 )
-            )
-            tts_summary = tts_response.text.strip()
-            logging.info(f"[VideoUnderstand] TTS summary: {len(tts_summary)} chars")
+                tts_summary = tts_response.text.strip()
+                logging.info(f"[VideoUnderstand] TTS summary: {len(tts_summary)} chars")
         except Exception as tts_error:
+            if is_quota_error(tts_error):
+                logging.error(f"[VideoUnderstand] Quota exceeded during TTS: {tts_error}")
+                return quota_response()
             logging.warning(f"[VideoUnderstand] TTS summary failed: {tts_error}")
             tts_summary = summary_text
 
