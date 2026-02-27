@@ -7,51 +7,27 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
-// ─── Safe Summary Parser ───
+// ─── Safe Summary Parser (matches YouTube implementation) ───
 
-function parseSummaryContent(raw: string): { type: "parsed"; summary: string; keyPoints: string[] } | { type: "plain"; text: string } {
-    if (typeof raw !== "string") return { type: "plain", text: String(raw || "") }
+function parseSummaryString(raw: string): { summary: string; keyPoints?: any[] } {
+    if (typeof raw !== "string") return { summary: String(raw || "") }
     const trimmed = raw.trim()
-    if (!trimmed.startsWith("{")) return { type: "plain", text: raw }
+    if (!trimmed.startsWith("{")) return { summary: raw }
     try {
         const parsed = JSON.parse(trimmed)
         if (parsed && typeof parsed.summary === "string") {
-            const keyPoints = Array.isArray(parsed.keyPoints)
-                ? parsed.keyPoints.map((kp: any) => (typeof kp === "string" ? kp : kp?.point || kp?.text || String(kp)))
-                : []
-            return { type: "parsed", summary: parsed.summary, keyPoints }
+            return {
+                summary: parsed.summary,
+                keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
+            }
         }
-        return { type: "plain", text: raw }
+        return { summary: raw }
     } catch {
-        return { type: "plain", text: raw }
+        return { summary: raw }
     }
 }
 
-// ─── Summary Content Renderer ───
-
-function SummaryContent({ content }: { content: string }) {
-    const result = parseSummaryContent(content)
-    if (result.type === "parsed") {
-        return (
-            <>
-                <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed" style={{ whiteSpace: "pre-line" }}>{result.summary}</p>
-                {result.keyPoints.length > 0 && (
-                    <ul className="mt-4 space-y-2">
-                        {result.keyPoints.map((point, i) => (
-                            <li key={i} className="flex gap-2 items-start">
-                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                                    {i + 1}
-                                </span>
-                                <span className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed" style={{ whiteSpace: "pre-line" }}>{point}</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </>
-        )
-    }
-    return <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed" style={{ whiteSpace: "pre-line" }}>{result.text}</p>
-}
+// ─── Summary Content Renderer (removed - now using TypewriterText like YouTube) ───
 
 // ─── Typewriter Text Component ───
 
@@ -501,8 +477,8 @@ export default function DocSummaryPage() {
                 .eq("id", id)
                 .maybeSingle()
 
-            // If not found by id (or UUID format error), try by slug
-            if (!row) {
+            // If not found by id, try by slug (matches YouTube implementation)
+            if (!row && !fetchError) {
                 console.log("[DocSummary] Not found by id, trying slug...")
                 const slugResult = await supabase
                     .from("summaries")
@@ -735,17 +711,19 @@ export default function DocSummaryPage() {
         URL.revokeObjectURL(url)
     }
 
-    // ── Get display values (with translations applied) ──
-    const displaySummary = showOriginal ? (originalDataRef.current?.summary || "") : applyReplacements(translatedData?.summary || data?.summary || "")
-    const displayExplanation = showOriginal ? (originalDataRef.current?.explanation || "") : applyReplacements(translatedData?.explanation || data?.explanation || "")
-    const displayKeyPoints = showOriginal
-        ? (originalDataRef.current?.keyPoints || [])
-        : (translatedData?.keyPoints || data?.keyPoints || []).map((kp: any) => ({
-            ...kp,
-            point: applyReplacements(kp.point),
-        }))
-    const displayTTS = showOriginal ? (originalDataRef.current?.ttsSummary || "") : applyReplacements(translatedData?.ttsSummary || data?.ttsSummary || "")
-    const displayExtractedText = showOriginal ? (originalDataRef.current?.transcript || "") : (translatedExtractedText || applyReplacements(data?.transcript || ""))
+    // ── Get display values (with translations applied) — matches YouTube implementation ──
+    const orig = originalDataRef.current
+    const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
+    const parsedSummary = parseSummaryString(rawSummaryValue)
+    const rawSummary = parsedSummary.summary
+    const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
+    const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
+    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
+    const displaySummary = showOriginal ? rawSummary : applyReplacements(rawSummary)
+    const displayExplanation = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
+    const displayTTS = showOriginal ? rawTTS : applyReplacements(rawTTS)
+    const displayKeyPoints = showOriginal ? rawKeyPoints : rawKeyPoints.map((kp: any) => ({ ...kp, point: applyReplacements(kp.point) }))
+    const displayExtractedText = showOriginal ? (orig?.transcript || "") : (translatedExtractedText || applyReplacements(data?.transcript || ""))
 
     // ── Loading ──
     if (loading) {
@@ -886,7 +864,9 @@ export default function DocSummaryPage() {
                         </div>
                         <h2 className="text-lg font-semibold text-foreground">{t("Summary")}</h2>
                     </div>
-                    <SummaryContent content={displaySummary} />
+                    <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-line">
+                        <TypewriterText text={displaySummary} isAnimating={isTextAnimating} />
+                    </p>
                 </section>
 
                 {/* Key Points */}
