@@ -437,15 +437,15 @@ Rules:
                 tts_summary = summary_text
             else:
                 tts_response = model.generate_content(
-                    f"""Rewrite the following summary as if you're casually explaining it to a friend over coffee. 
-Make it perfect for text-to-speech: conversational, clear, no jargon, no bullet points. 
-Use natural pauses and transitions. Keep it under 500 words. Write in English.
+                    f"""Generate a concise spoken summary between 20 and 30 words based strictly on the provided summary.
+Do not add greetings, storytelling tone, or filler phrases.
+Keep it professional, direct, and factual.
 
-Summary to rewrite:
+Summary:
 {summary_text}""",
                     generation_config=genai.GenerationConfig(
-                        max_output_tokens=1000,
-                        temperature=0.8,
+                        max_output_tokens=100,
+                        temperature=0.5,
                     )
                 )
                 tts_summary = tts_response.text.strip()
