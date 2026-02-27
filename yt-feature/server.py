@@ -29,6 +29,30 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+
+# ─── Global Error Handlers (ensure JSON responses, no HTML) ───
+
+@app.errorhandler(400)
+@app.errorhandler(404)
+@app.errorhandler(405)
+@app.errorhandler(500)
+def handle_http_errors(e):
+    return jsonify({
+        "status": "error",
+        "message": str(e)
+    }), getattr(e, "code", 500)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    logging.error(f"[Flask] Uncaught exception: {e}")
+    return jsonify({
+        "status": "error",
+        "message": "Internal server error",
+        "details": str(e)
+    }), 500
+
+
 # Global in-memory job storage for async video processing
 video_jobs = {}
 
