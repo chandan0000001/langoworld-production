@@ -10,6 +10,14 @@
 
 # LangoWorld — AI-Powered Video Intelligence Platform
 
+## 🔗 Live Links
+
+| Service | URL |
+|---------|-----|
+| **Live Web** | https://langoworld-production.vercel.app/ |
+| **Backend** | https://langoworld-production.onrender.com/ |
+| **Health API** | https://langoworld-production.onrender.com/api/health |
+
 > **Summarize any video. Translate to 25+ languages. Listen with AI voice.**
 
 LangoWorld transforms **YouTube videos**, **uploaded videos**, and **documents** into structured, multilingual content with AI summaries, TTS narration, and instant translation.
