@@ -445,7 +445,7 @@ Summary:
 {summary_text}""",
                     generation_config=genai.GenerationConfig(
                         max_output_tokens=1000,
-                        temperature=0.7,
+                        temperature=0.8,
                     )
                 )
                 tts_summary = tts_response.text.strip()
