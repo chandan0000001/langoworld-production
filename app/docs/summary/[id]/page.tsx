@@ -9,7 +9,16 @@ import { useLingo, LANGUAGES } from "@/lib/lingo"
 
 // ─── Safe Summary Parser (matches YouTube implementation) ───
 
-function parseSummaryString(raw: string): { summary: string; keyPoints?: any[] } {
+function parseSummaryString(raw: string | object): { summary: string; keyPoints?: any[] } {
+    // Handle case where raw is already a parsed object (e.g., PDF backend response)
+    if (raw && typeof raw === "object") {
+        const obj = raw as any
+        return {
+            summary: typeof obj.summary === "string" ? obj.summary : String(raw || ""),
+            keyPoints: Array.isArray(obj.keyPoints) ? obj.keyPoints : undefined
+        }
+    }
+
     if (typeof raw !== "string") return { summary: String(raw || "") }
     const trimmed = raw.trim()
     if (!trimmed.startsWith("{")) return { summary: raw }
