@@ -317,7 +317,8 @@ export default function WorkspacePage() {
             toast.info("AI is analyzing your video...")
 
             // Phase 2: Start async analysis job (backend returns job_id immediately)
-            const analyzeRes = await fetch("/api/video-understand", {
+            // Bypass Vercel serverless - call Render backend directly to avoid 504 timeout
+            const analyzeRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/video-understand`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
