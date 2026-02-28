@@ -7,17 +7,53 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
+// ─── Normalize To String (boundary normalization for video summaries) ───
+// Recursively unwraps any structure to plain string.
+function normalizeToString(val: unknown): string {
+    if (val == null) return ""
+    if (typeof val === "string") {
+        const trimmed = val.trim()
+        if (!trimmed) return ""
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                const parsed = JSON.parse(trimmed)
+                return normalizeToString(parsed)
+            } catch {
+                return val
+            }
+        }
+        return val
+    }
+    if (typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if ("summary" in obj && obj.summary != null) return normalizeToString(obj.summary)
+        if ("content" in obj && obj.content != null) return normalizeToString(obj.content)
+        if ("text" in obj && obj.text != null) return normalizeToString(obj.text)
+        if (Array.isArray(val)) return ""
+        return ""
+    }
+    return String(val)
+}
+
 // ─── Safe Summary Parser ───
 
-function parseSummaryString(raw: string): { summary: string; keyPoints?: any[] } {
+function parseSummaryString(raw: string | object): { summary: string; keyPoints?: any[] } {
+    // Handle object input (e.g., from backend response)
+    if (raw && typeof raw === "object") {
+        const obj = raw as any
+        return {
+            summary: normalizeToString(obj.summary),
+            keyPoints: Array.isArray(obj.keyPoints) ? obj.keyPoints : undefined
+        }
+    }
     if (typeof raw !== "string") return { summary: String(raw || "") }
     const trimmed = raw.trim()
     if (!trimmed.startsWith("{")) return { summary: raw }
     try {
         const parsed = JSON.parse(trimmed)
-        if (parsed && typeof parsed.summary === "string") {
+        if (parsed && typeof parsed === "object") {
             return {
-                summary: parsed.summary,
+                summary: normalizeToString(parsed.summary),
                 keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
             }
         }
