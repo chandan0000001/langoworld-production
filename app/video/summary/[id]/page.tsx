@@ -35,34 +35,6 @@ function normalizeToString(val: unknown): string {
     return String(val)
 }
 
-// ─── Safe Summary Parser ───
-
-function parseSummaryString(raw: string | object): { summary: string; keyPoints?: any[] } {
-    // Handle object input (e.g., from backend response)
-    if (raw && typeof raw === "object") {
-        const obj = raw as any
-        return {
-            summary: normalizeToString(obj.summary),
-            keyPoints: Array.isArray(obj.keyPoints) ? obj.keyPoints : undefined
-        }
-    }
-    if (typeof raw !== "string") return { summary: String(raw || "") }
-    const trimmed = raw.trim()
-    if (!trimmed.startsWith("{")) return { summary: raw }
-    try {
-        const parsed = JSON.parse(trimmed)
-        if (parsed && typeof parsed === "object") {
-            return {
-                summary: normalizeToString(parsed.summary),
-                keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
-            }
-        }
-        return { summary: raw }
-    } catch {
-        return { summary: raw }
-    }
-}
-
 // ─── Typewriter Text Component ───
 
 function TypewriterText({ text, isAnimating, className }: { text: string; isAnimating: boolean; className?: string }) {
@@ -559,17 +531,18 @@ export default function VideoSummaryPage() {
                 return
             }
 
+            // Normalize text fields at data boundary (single point of normalization)
             const parsed: VideoSummaryData = {
                 id: row.id,
                 videoId: "",
                 videoUrl: row.video_url,
                 videoTitle: row.video_title,
                 channel: row.channel,
-                summary: row.summary,
+                summary: normalizeToString(row.summary),
                 transcript: row.transcript,
                 keyPoints: row.key_points || [],
-                explanation: row.explanation,
-                ttsSummary: row.tts_summary,
+                explanation: normalizeToString(row.explanation),
+                ttsSummary: normalizeToString(row.tts_summary),
                 chapters: row.chapters || [],
                 createdAt: row.created_at,
             }
@@ -588,7 +561,16 @@ export default function VideoSummaryPage() {
             if (translations && translations.length > 0) {
                 const t = translations[0].translated_data as any
                 if (t) {
-                    if (t.translatedData) setTranslatedData(t.translatedData)
+                    // Normalize restored translation data to ensure strings
+                    if (t.translatedData) {
+                        const normalizedTranslation = {
+                            ...t.translatedData,
+                            summary: normalizeToString(t.translatedData.summary),
+                            explanation: normalizeToString(t.translatedData.explanation),
+                            ttsSummary: normalizeToString(t.translatedData.ttsSummary),
+                        }
+                        setTranslatedData(normalizedTranslation)
+                    }
                     if (t.pageLang) setPageLang(t.pageLang)
                     if (t.translatedTranscript) setTranslatedTranscript(t.translatedTranscript)
                     if (t.transcriptLang) setTranscriptLang(t.transcriptLang)
@@ -666,10 +648,11 @@ export default function VideoSummaryPage() {
             const kpCount = (data.keyPoints || []).length
             const translatedKP = translated.slice(3, 3 + kpCount)
             setIsTextAnimating(true)
+            // Normalize translations to ensure they are plain strings
             const newTranslatedData = {
-                summary: translated[0],
-                explanation: translated[1],
-                ttsSummary: translated[2],
+                summary: normalizeToString(translated[0]),
+                explanation: normalizeToString(translated[1]),
+                ttsSummary: normalizeToString(translated[2]),
                 keyPoints: (data.keyPoints || []).map((kp: any, i: number) => ({ ...kp, point: translatedKP[i] || kp.point })),
             }
             setTranslatedData(newTranslatedData)
@@ -795,16 +778,17 @@ export default function VideoSummaryPage() {
     }, [persistTranslations])
 
     // Resolved display data
+    // Note: data.summary/explanation/ttsSummary are already normalized at fetch boundary
     const orig = originalDataRef.current
-    const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
-    const parsedSummary = parseSummaryString(rawSummaryValue)
-    const rawSummary = parsedSummary.summary
-    const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
-    const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
-    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
-    const displaySummary = showOriginal ? rawSummary : applyReplacements(rawSummary)
-    const displayExplanation = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
-    const displayTTS = showOriginal ? rawTTS : applyReplacements(rawTTS)
+    const rawSummary: string = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
+    const rawExplanation: string = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
+    const rawTTS: string = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
+    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || [])
+    
+    // Apply inline replacements for final display
+    const displaySummary: string = showOriginal ? rawSummary : applyReplacements(rawSummary)
+    const displayExplanation: string = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
+    const displayTTS: string = showOriginal ? rawTTS : applyReplacements(rawTTS)
     const displayKeyPoints = showOriginal ? rawKeyPoints : rawKeyPoints.map((kp: any) => ({ ...kp, point: applyReplacements(kp.point) }))
     const displayTranscript = showOriginal ? (orig?.transcript || "") : applyReplacements(translatedTranscript || data?.transcript || "")
     const currentTranscriptLang = LANGUAGES.find(l => l.code === transcriptLang)
