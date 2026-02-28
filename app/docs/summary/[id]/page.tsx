@@ -724,7 +724,11 @@ export default function DocSummaryPage() {
     const orig = originalDataRef.current
     const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
     const parsedSummary = parseSummaryString(rawSummaryValue)
-    const rawSummary = parsedSummary.summary
+    // Ensure rawSummary is always a string (handle nested object from PDF backend)
+    let rawSummary = parsedSummary.summary
+    if (typeof rawSummary === "object" && rawSummary !== null) {
+        rawSummary = (rawSummary as any).summary || ""
+    }
     const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
     const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
     const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])

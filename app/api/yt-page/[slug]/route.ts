@@ -15,13 +15,13 @@ export async function GET(
         return NextResponse.json(memData)
     }
 
-    // Fallback: check Supabase custom_slug column
+    // Fallback: check Supabase slug column
     try {
         const supabase = await createClient()
         const { data } = await supabase
             .from("summaries")
             .select("*")
-            .eq("custom_slug", slug)
+            .eq("slug", slug)
             .single()
 
         if (data) {
