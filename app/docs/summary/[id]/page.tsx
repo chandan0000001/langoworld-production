@@ -36,6 +36,38 @@ function parseSummaryString(raw: string | object): { summary: string; keyPoints?
     }
 }
 
+// ─── Ensure Display String (final safeguard before UI render) ───
+// Guarantees only a plain text string reaches TypewriterText, regardless of input type
+function ensureDisplayString(val: unknown): string {
+    // Already a string - check if it's JSON that needs extraction
+    if (typeof val === "string") {
+        const trimmed = val.trim()
+        // If it looks like JSON, try to extract the summary
+        if (trimmed.startsWith("{")) {
+            try {
+                const parsed = JSON.parse(trimmed)
+                if (parsed && typeof parsed === "object") {
+                    // Recursively extract from parsed object
+                    return ensureDisplayString(parsed.summary ?? parsed.content ?? parsed.text ?? "")
+                }
+            } catch {
+                // Not valid JSON, return as-is
+            }
+        }
+        return val
+    }
+    // Handle objects (including nested {summary: {summary: "..."}})
+    if (val && typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if ("summary" in obj) return ensureDisplayString(obj.summary)
+        if ("content" in obj) return ensureDisplayString(obj.content)
+        if ("text" in obj) return ensureDisplayString(obj.text)
+        return ""
+    }
+    // Fallback for null/undefined/other
+    return val == null ? "" : String(val)
+}
+
 // ─── Summary Content Renderer (removed - now using TypewriterText like YouTube) ───
 
 // ─── Typewriter Text Component ───
@@ -678,7 +710,7 @@ export default function DocSummaryPage() {
         setIsExtractedTextTranslating(false)
     }
 
-    // ── TTS (with ref lock to prevent double-click) ──
+    // ── TTS (with ref lock to prevent double-click) ──no gureanyty fir workes er []
     const handleTTS = useCallback(() => {
         const text = translatedData?.ttsSummary || data?.ttsSummary || data?.summary || ""
         if (!text) return
@@ -724,11 +756,8 @@ export default function DocSummaryPage() {
     const orig = originalDataRef.current
     const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
     const parsedSummary = parseSummaryString(rawSummaryValue)
-    // Ensure rawSummary is always a string (handle nested object from PDF backend)
-    let rawSummary = parsedSummary.summary
-    if (typeof rawSummary === "object" && rawSummary !== null) {
-        rawSummary = (rawSummary as any).summary || ""
-    }
+    // Ensure rawSummary is always a plain string (use ensureDisplayString as final safeguard)
+    const rawSummary = ensureDisplayString(parsedSummary.summary)
     const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
     const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
     const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
