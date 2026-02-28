@@ -7,65 +7,46 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
-// ─── Safe Summary Parser (matches YouTube implementation) ───
-
-function parseSummaryString(raw: string | object): { summary: string; keyPoints?: any[] } {
-    // Handle case where raw is already a parsed object (e.g., PDF backend response)
-    if (raw && typeof raw === "object") {
-        const obj = raw as any
-        return {
-            summary: typeof obj.summary === "string" ? obj.summary : String(raw || ""),
-            keyPoints: Array.isArray(obj.keyPoints) ? obj.keyPoints : undefined
-        }
-    }
-
-    if (typeof raw !== "string") return { summary: String(raw || "") }
-    const trimmed = raw.trim()
-    if (!trimmed.startsWith("{")) return { summary: raw }
-    try {
-        const parsed = JSON.parse(trimmed)
-        if (parsed && typeof parsed.summary === "string") {
-            return {
-                summary: parsed.summary,
-                keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
-            }
-        }
-        return { summary: raw }
-    } catch {
-        return { summary: raw }
-    }
-}
-
-// ─── Ensure Display String (final safeguard before UI render) ───
-// Guarantees only a plain text string reaches TypewriterText, regardless of input type
-function ensureDisplayString(val: unknown): string {
-    // Already a string - check if it's JSON that needs extraction
+// ─── Normalize To String (single boundary normalization) ───
+// Applied once at data fetch boundary. Recursively unwraps any structure to plain string.
+// Handles: JSON strings, objects with .summary/.content/.text, nested combinations.
+function normalizeToString(val: unknown): string {
+    // Base case: null/undefined
+    if (val == null) return ""
+    
+    // String case: may be plain text or JSON-encoded
     if (typeof val === "string") {
         const trimmed = val.trim()
-        // If it looks like JSON, try to extract the summary
-        if (trimmed.startsWith("{")) {
+        if (!trimmed) return ""
+        // Check if it's JSON that wraps actual content
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             try {
                 const parsed = JSON.parse(trimmed)
-                if (parsed && typeof parsed === "object") {
-                    // Recursively extract from parsed object
-                    return ensureDisplayString(parsed.summary ?? parsed.content ?? parsed.text ?? "")
-                }
+                // Recurse into parsed structure
+                return normalizeToString(parsed)
             } catch {
-                // Not valid JSON, return as-is
+                // Not valid JSON, return as plain string
+                return val
             }
         }
         return val
     }
-    // Handle objects (including nested {summary: {summary: "..."}})
-    if (val && typeof val === "object") {
+    
+    // Object case: extract .summary, .content, or .text fields
+    if (typeof val === "object") {
         const obj = val as Record<string, unknown>
-        if ("summary" in obj) return ensureDisplayString(obj.summary)
-        if ("content" in obj) return ensureDisplayString(obj.content)
-        if ("text" in obj) return ensureDisplayString(obj.text)
+        // Priority order: summary > content > text
+        if ("summary" in obj && obj.summary != null) return normalizeToString(obj.summary)
+        if ("content" in obj && obj.content != null) return normalizeToString(obj.content)
+        if ("text" in obj && obj.text != null) return normalizeToString(obj.text)
+        // Array: return empty (arrays aren't text content)
+        if (Array.isArray(val)) return ""
+        // Unknown object shape: return empty rather than "[object Object]"
         return ""
     }
-    // Fallback for null/undefined/other
-    return val == null ? "" : String(val)
+    
+    // Primitive fallback (number, boolean)
+    return String(val)
 }
 
 // ─── Summary Content Renderer (removed - now using TypewriterText like YouTube) ───
@@ -541,8 +522,15 @@ export default function DocSummaryPage() {
                     const res = await fetch(`/api/yt-summary/${id}`)
                     if (!res.ok) throw new Error("not found")
                     const json = await res.json()
-                    setData(json)
-                    originalDataRef.current = JSON.parse(JSON.stringify(json))
+                    // Normalize at boundary for API fallback path
+                    const normalized = {
+                        ...json,
+                        summary: normalizeToString(json.summary),
+                        explanation: normalizeToString(json.explanation),
+                        ttsSummary: normalizeToString(json.ttsSummary),
+                    }
+                    setData(normalized)
+                    originalDataRef.current = JSON.parse(JSON.stringify(normalized))
                 } catch {
                     setError("Document summary not found.")
                 } finally {
@@ -551,17 +539,18 @@ export default function DocSummaryPage() {
                 return
             }
 
+            // Normalize text fields at data boundary (single point of normalization)
             const parsed: VideoSummaryData = {
                 id: row.id,
                 videoId: "",
                 videoUrl: row.video_url,
                 videoTitle: row.video_title,
                 channel: row.channel,
-                summary: row.summary,
+                summary: normalizeToString(row.summary),
                 transcript: row.transcript,
                 keyPoints: row.key_points || [],
-                explanation: row.explanation,
-                ttsSummary: row.tts_summary,
+                explanation: normalizeToString(row.explanation),
+                ttsSummary: normalizeToString(row.tts_summary),
                 chapters: row.chapters || [],
                 createdAt: row.created_at,
             }
@@ -752,18 +741,26 @@ export default function DocSummaryPage() {
         URL.revokeObjectURL(url)
     }
 
-    // ── Get display values (with translations applied) — matches YouTube implementation ──
+    // ── Get display values (with translations applied) ──
+    // Note: data.summary is already normalized to string at fetch boundary
     const orig = originalDataRef.current
-    const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
-    const parsedSummary = parseSummaryString(rawSummaryValue)
-    // Ensure rawSummary is always a plain string (use ensureDisplayString as final safeguard)
-    const rawSummary = ensureDisplayString(parsedSummary.summary)
-    const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
-    const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
-    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
-    const displaySummary = showOriginal ? rawSummary : applyReplacements(rawSummary)
-    const displayExplanation = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
-    const displayTTS = showOriginal ? rawTTS : applyReplacements(rawTTS)
+    const rawSummary: string = showOriginal 
+        ? (orig?.summary || "") 
+        : normalizeToString(translatedData?.summary) || (data?.summary || "")
+    const rawExplanation: string = showOriginal 
+        ? (orig?.explanation || "") 
+        : normalizeToString(translatedData?.explanation) || (data?.explanation || "")
+    const rawTTS: string = showOriginal 
+        ? (orig?.ttsSummary || "") 
+        : normalizeToString(translatedData?.ttsSummary) || (data?.ttsSummary || "")
+    const rawKeyPoints = showOriginal 
+        ? (orig?.keyPoints || []) 
+        : (translatedData?.keyPoints || data?.keyPoints || [])
+    
+    // Final display values with inline replacements applied
+    const displaySummary: string = showOriginal ? rawSummary : applyReplacements(rawSummary)
+    const displayExplanation: string = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
+    const displayTTS: string = showOriginal ? rawTTS : applyReplacements(rawTTS)
     const displayKeyPoints = showOriginal ? rawKeyPoints : rawKeyPoints.map((kp: any) => ({ ...kp, point: applyReplacements(kp.point) }))
     const displayExtractedText = showOriginal ? (orig?.transcript || "") : (translatedExtractedText || applyReplacements(data?.transcript || ""))
 
