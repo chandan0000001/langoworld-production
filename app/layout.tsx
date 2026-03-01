@@ -6,6 +6,7 @@ import { LingoProvider } from "@/lib/lingo";
 import { TranslationLoader } from "@/components/translation-loader";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -105,6 +106,7 @@ export default function RootLayout({
             <Toaster />
           </LingoProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
