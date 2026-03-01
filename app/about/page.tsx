@@ -358,7 +358,7 @@ export default function AboutPage() {
                             <div className="relative mb-8">
                                 <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-br from-blue-400 via-indigo-400 to-violet-400 opacity-60 blur-sm" />
                                 <img
-                                    src="https://x.com/Chandan87123804/photo/"
+                                    src="https://photos.app.goo.gl/LwqrBRJmxGTgQH1e7"
                                     alt="Chandan Kumar Dalai"
                                     width={110}
                                     height={110}
