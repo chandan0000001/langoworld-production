@@ -38,23 +38,26 @@ function normalizeToString(val: unknown): string {
 // ─── Typewriter Text Component ───
 
 function TypewriterText({ text, isAnimating, className }: { text: string; isAnimating: boolean; className?: string }) {
-    const [displayText, setDisplayText] = useState(text)
+    // Final safety normalization at render boundary
+    const safeText = normalizeToString(text)
+    const [displayText, setDisplayText] = useState(safeText)
     const [isTyping, setIsTyping] = useState(false)
-    const prevTextRef = useRef(text)
+    const prevTextRef = useRef(safeText)
 
     useEffect(() => {
-        if (text === prevTextRef.current) { setDisplayText(text); return }
-        prevTextRef.current = text
-        if (!isAnimating) { setDisplayText(text); return }
+        const normalized = normalizeToString(text)
+        if (normalized === prevTextRef.current) { setDisplayText(normalized); return }
+        prevTextRef.current = normalized
+        if (!isAnimating) { setDisplayText(normalized); return }
 
         setIsTyping(true)
         setDisplayText("")
         let index = 0
-        const speed = Math.max(6, Math.min(25, 1800 / text.length))
+        const speed = Math.max(6, Math.min(25, 1800 / normalized.length))
         const interval = setInterval(() => {
             index++
-            setDisplayText(text.slice(0, index))
-            if (index >= text.length) { clearInterval(interval); setIsTyping(false) }
+            setDisplayText(normalized.slice(0, index))
+            if (index >= normalized.length) { clearInterval(interval); setIsTyping(false) }
         }, speed)
         return () => clearInterval(interval)
     }, [text, isAnimating])

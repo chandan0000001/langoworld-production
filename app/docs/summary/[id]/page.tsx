@@ -54,12 +54,15 @@ function normalizeToString(val: unknown): string {
 // ─── Typewriter Text Component ───
 
 function TypewriterText({ text, isAnimating, className }: { text: string; isAnimating: boolean; className?: string }) {
+    // Final safety normalization at render boundary
+    const safeText = normalizeToString(text)
     const [displayedText, setDisplayedText] = useState("")
     const [isComplete, setIsComplete] = useState(false)
 
     useEffect(() => {
-        if (!isAnimating || !text) {
-            setDisplayedText(text)
+        const normalized = normalizeToString(text)
+        if (!isAnimating || !normalized) {
+            setDisplayedText(normalized)
             setIsComplete(true)
             return
         }
@@ -68,12 +71,12 @@ function TypewriterText({ text, isAnimating, className }: { text: string; isAnim
         let idx = 0
         const interval = setInterval(() => {
             idx += 3
-            if (idx >= text.length) {
-                setDisplayedText(text)
+            if (idx >= normalized.length) {
+                setDisplayedText(normalized)
                 setIsComplete(true)
                 clearInterval(interval)
             } else {
-                setDisplayedText(text.slice(0, idx))
+                setDisplayedText(normalized.slice(0, idx))
             }
         }, 8)
         return () => clearInterval(interval)
