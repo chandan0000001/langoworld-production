@@ -12,7 +12,16 @@ export async function requireAdmin() {
   // Get current user
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   
+  // DEBUG: Log auth result
+  console.log("[requireAdmin] Auth result:", { 
+    hasUser: !!user, 
+    userId: user?.id,
+    userEmail: user?.email,
+    authError: authError?.message 
+  })
+  
   if (authError || !user) {
+    console.log("[requireAdmin] Redirecting to /login - no user or auth error")
     redirect("/login")
   }
   
@@ -23,7 +32,20 @@ export async function requireAdmin() {
     .eq("id", user.id)
     .single()
   
+  // DEBUG: Log profile query result
+  console.log("[requireAdmin] Profile query:", {
+    hasProfile: !!profile,
+    profile,
+    profileError: profileError?.message,
+    profileErrorCode: profileError?.code
+  })
+  
   if (profileError || !profile || profile.role !== "admin") {
+    console.log("[requireAdmin] Redirecting to / - profile issue:", {
+      hasError: !!profileError,
+      hasProfile: !!profile,
+      role: profile?.role
+    })
     redirect("/")
   }
   
