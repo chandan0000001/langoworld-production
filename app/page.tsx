@@ -24,8 +24,8 @@ function Ornament({ className }: { className?: string }) {
 function GlassButton({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) {
     return (
         <Link href={href}>
-            <button className={`group relative inline-flex items-center justify-center gap-3 px-10 py-4 rounded-full transition-all duration-300 ${className}`}>
-                <div className="absolute inset-0 rounded-full bg-gradient-to-b from-black/80 to-black/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] transition-all duration-300 group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.25)] group-hover:scale-[1.02] group-hover:bg-black" />
+            <button className={`group relative inline-flex items-center justify-center gap-3 px-10 py-4 rounded-full transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] ${className}`}>
+                <div className="absolute inset-0 rounded-full bg-gradient-to-b from-black/80 to-black/90 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.15)] transition-all duration-200 group-hover:shadow-[0_12px_40px_rgba(0,0,0,0.25)] group-hover:bg-black" />
                 <div className="absolute inset-[1px] rounded-full bg-gradient-to-b from-white/20 to-transparent opacity-60" />
                 <span className="relative z-10 flex items-center gap-2.5 font-[family-name:var(--font-inter)] text-lg font-bold text-white tracking-tight">
                     {children}
@@ -431,47 +431,67 @@ export default function Home() {
                     </div>
 
                     {/* Headlines — Stacked Solid + Outline */}
-                    <div
-                        className="flex flex-col items-center transition-all duration-[1200ms] delay-100 translate-y-8 opacity-0"
-                        style={{
-                            transform: mounted ? "translateY(0)" : "translateY(30px)",
-                            opacity: mounted ? 1 : 0
-                        }}
-                    >
-                        {/* Solid Line */}
-                        <h1 className="font-[family-name:var(--font-inter)] text-6xl sm:text-7xl md:text-8xl lg:text-[7rem] font-black text-zinc-900 tracking-tighter leading-[0.9]">
-                            LangoWorld
+                    <div className="flex flex-col items-center">
+                        {/* Solid Line — Letter-by-letter reveal */}
+                        <h1 className="font-[family-name:var(--font-inter)] text-6xl sm:text-7xl md:text-8xl lg:text-[7rem] font-black text-zinc-900 tracking-tighter leading-[0.9] flex">
+                            {"LangoWorld".split("").map((letter, i) => (
+                                <motion.span
+                                    key={i}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{
+                                        duration: 0.6,
+                                        delay: i * 0.05,
+                                        ease: [0.16, 1, 0.3, 1],
+                                    }}
+                                >
+                                    {letter}
+                                </motion.span>
+                            ))}
                         </h1>
 
-                        {/* Outline Line — "Global Voice" */}
-                        <h1
+                        {/* Outline Line — "Global Voice" fade + slide */}
+                        <motion.h1
                             className="font-[family-name:var(--font-inter)] text-6xl sm:text-7xl md:text-8xl lg:text-[7rem] font-black tracking-tighter leading-[0.9] mt-2 sm:mt-0"
                             style={{
                                 WebkitTextStroke: '2px #71717A',
                                 color: 'transparent',
                             }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{
+                                duration: 0.7,
+                                delay: 0.5,
+                                ease: [0.16, 1, 0.3, 1],
+                            }}
                         >
                             Global Voice
-                        </h1>
+                        </motion.h1>
                     </div>
 
-                    {/* Subtitle */}
-                    <p
-                        className="font-[family-name:var(--font-inter)] text-lg sm:text-xl text-zinc-600 font-medium tracking-tight max-w-2xl mx-auto leading-relaxed transition-all duration-[1400ms] delay-200 translate-y-8 opacity-0"
-                        style={{
-                            transform: mounted ? "translateY(0)" : "translateY(30px)",
-                            opacity: mounted ? 1 : 0
+                    {/* Subtitle — fade + slide + subtle blur */}
+                    <motion.p
+                        className="font-[family-name:var(--font-inter)] text-lg sm:text-xl text-zinc-600 font-medium tracking-tight max-w-2xl mx-auto leading-relaxed"
+                        initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
+                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                        transition={{
+                            duration: 0.7,
+                            delay: 0.7,
+                            ease: [0.16, 1, 0.3, 1],
                         }}
                     >
                         Empower your communication with real-time translation and AI dubbing that fuels global reach and unstoppable connection.
-                    </p>
+                    </motion.p>
 
                     {/* Buttons Row — Centered CTAs */}
-                    <div
-                        className="flex items-center justify-center gap-4 transition-all duration-[1600ms] delay-300 translate-y-8 opacity-0"
-                        style={{
-                            transform: mounted ? "translateY(0)" : "translateY(30px)",
-                            opacity: mounted ? 1 : 0
+                    <motion.div
+                        className="flex items-center justify-center gap-4"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{
+                            duration: 0.6,
+                            delay: 0.9,
+                            ease: [0.16, 1, 0.3, 1],
                         }}
                     >
                         {/* Primary Button */}
@@ -482,14 +502,14 @@ export default function Home() {
                         {/* Secondary Button — Rounded with Glow */}
                         <Link
                             href="/about"
-                            className="group relative px-8 py-4 rounded-full bg-white border border-zinc-200 text-zinc-900 font-[family-name:var(--font-inter)] font-bold text-sm tracking-tight hover:border-zinc-300 transition-all duration-300 hover:-translate-y-0.5 shadow-sm hover:shadow-lg"
+                            className="group relative px-8 py-4 rounded-full bg-white border border-zinc-200 text-zinc-900 font-[family-name:var(--font-inter)] font-bold text-sm tracking-tight hover:border-zinc-300 transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] shadow-sm hover:shadow-lg"
                         >
                             <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-blue-400/30 to-indigo-400/30 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                             <span className="relative flex items-center gap-2">
                                 Our Story <ArrowRight className="w-4 h-4 opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                             </span>
                         </Link>
-                    </div>
+                    </motion.div>
 
                 </div>
 

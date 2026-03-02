@@ -97,11 +97,38 @@ function LoginForm() {
                     from { opacity: 0; transform: translateY(24px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
+                @keyframes card-entrance {
+                    from { opacity: 0; transform: scale(0.96); }
+                    to { opacity: 1; transform: scale(1); }
+                }
+                @keyframes chip-float {
+                    0%, 100% { transform: translateY(0px) rotate(0deg); }
+                    50% { transform: translateY(-4px) rotate(1deg); }
+                }
                 .animate-fade-up { animation: fade-up 0.7s ease-out forwards; }
+                .animate-card-entrance { 
+                    animation: card-entrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+                .animate-chip-float {
+                    animation: chip-float 6s ease-in-out infinite;
+                }
+                .chip-delay-0 { animation-delay: 0s; }
+                .chip-delay-1 { animation-delay: 0.5s; }
+                .chip-delay-2 { animation-delay: 1s; }
+                .chip-delay-3 { animation-delay: 1.5s; }
                 .delay-1 { animation-delay: 0.1s; opacity: 0; }
                 .delay-2 { animation-delay: 0.2s; opacity: 0; }
                 .delay-3 { animation-delay: 0.3s; opacity: 0; }
                 .delay-4 { animation-delay: 0.4s; opacity: 0; }
+                .btn-hover { transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms ease; }
+                .btn-hover:hover { transform: scale(1.03); }
+                .btn-hover:active { transform: scale(0.97); }
+                @media (prefers-reduced-motion: reduce) {
+                    .animate-fade-up,
+                    .animate-card-entrance,
+                    .animate-chip-float { animation: none; opacity: 1; transform: none; }
+                    .btn-hover:hover, .btn-hover:active { transform: none; }
+                }
             `}</style>
 
             {/* ── Sunrise gradient — same as landing page ── */}
@@ -189,17 +216,17 @@ function LoginForm() {
                         Empower your communication with real-time translation and AI dubbing that fuels global reach and unstoppable connection.
                     </p>
 
-                    {/* Feature pills — warm palette */}
+                    {/* Feature pills — warm palette with float animation */}
                     <div className="flex flex-wrap gap-2">
                         {[
-                            "AI Summaries",
-                            "25+ Languages",
-                            "Smart Transcripts",
-                            "Key Points",
-                        ].map((label) => (
+                            { label: "AI Summaries", delay: "chip-delay-0" },
+                            { label: "25+ Languages", delay: "chip-delay-1" },
+                            { label: "Smart Transcripts", delay: "chip-delay-2" },
+                            { label: "Key Points", delay: "chip-delay-3" },
+                        ].map(({ label, delay }) => (
                             <span
                                 key={label}
-                                className="px-4 py-2 bg-white/60 backdrop-blur-sm border border-white/60 rounded-full text-xs font-semibold text-zinc-600 shadow-sm"
+                                className={`px-4 py-2 bg-white/60 backdrop-blur-sm border border-white/60 rounded-full text-xs font-semibold text-zinc-600 shadow-sm animate-chip-float ${delay}`}
                             >
                                 {label}
                             </span>
@@ -235,8 +262,8 @@ function LoginForm() {
                         </p>
                     </div>
 
-                    {/* Glass Card */}
-                    <div className="bg-white/70 backdrop-blur-2xl border border-white/60 rounded-[28px] shadow-2xl shadow-orange-900/[0.06] p-7 animate-fade-up delay-3">
+                    {/* Glass Card — premium entrance animation */}
+                    <div className="bg-white/70 backdrop-blur-2xl border border-white/60 rounded-[28px] shadow-2xl shadow-orange-900/[0.06] p-7 animate-card-entrance delay-3 hover:shadow-[0_25px_50px_-12px_rgba(249,115,22,0.12)] transition-shadow duration-500">
 
                         {/* Error / Success */}
                         {error && (
@@ -256,9 +283,9 @@ function LoginForm() {
                         <div className="space-y-2.5 mb-6">
                             <button
                                 onClick={() => handleOAuth("google")}
-                                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-white border border-zinc-200/80 rounded-2xl hover:bg-zinc-50 hover:border-zinc-300 hover:shadow-md hover:shadow-zinc-200/30 transition-all duration-300 group active:scale-[0.98]"
+                                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-white border border-zinc-200/80 rounded-2xl btn-hover hover:bg-zinc-50 hover:border-zinc-300 hover:shadow-md hover:shadow-zinc-200/30 transition-all duration-200 group"
                             >
-                                <svg className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" viewBox="0 0 24 24">
                                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
                                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -271,9 +298,9 @@ function LoginForm() {
 
                             <button
                                 onClick={() => handleOAuth("github")}
-                                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-zinc-900 rounded-2xl hover:bg-zinc-800 hover:shadow-lg hover:shadow-zinc-900/20 transition-all duration-300 group active:scale-[0.98]"
+                                className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-zinc-900 rounded-2xl btn-hover hover:bg-zinc-800 hover:shadow-lg hover:shadow-zinc-900/20 transition-all duration-200 group"
                             >
-                                <Github className="w-5 h-5 text-white transition-transform duration-300 group-hover:scale-110" />
+                                <Github className="w-5 h-5 text-white transition-transform duration-200 group-hover:scale-110" />
                                 <span className="font-[family-name:var(--font-inter)] text-sm font-semibold text-white">
                                     Continue with GitHub
                                 </span>
@@ -339,7 +366,7 @@ function LoginForm() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full flex items-center justify-center gap-2.5 px-4 py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-[family-name:var(--font-inter)] text-sm font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-zinc-900/20 hover:shadow-2xl hover:shadow-zinc-900/25 active:scale-[0.98] mt-2"
+                                className="w-full flex items-center justify-center gap-2.5 px-4 py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-[family-name:var(--font-inter)] text-sm font-bold btn-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-zinc-900/20 hover:shadow-2xl hover:shadow-zinc-900/25 transition-all duration-200 mt-2"
                             >
                                 {loading ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
