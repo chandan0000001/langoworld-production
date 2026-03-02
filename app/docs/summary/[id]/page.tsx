@@ -572,7 +572,20 @@ export default function DocSummaryPage() {
             if (translations && translations.length > 0) {
                 const t = translations[0].translated_data as any
                 if (t) {
-                    if (t.translatedData) setTranslatedData(t.translatedData)
+                    // Normalize restored translation data to ensure all fields are strings
+                    if (t.translatedData) {
+                        const normalizedTranslation = {
+                            ...t.translatedData,
+                            summary: normalizeToString(t.translatedData.summary),
+                            explanation: normalizeToString(t.translatedData.explanation),
+                            ttsSummary: normalizeToString(t.translatedData.ttsSummary),
+                            keyPoints: (t.translatedData.keyPoints || []).map((kp: any) => ({
+                                ...kp,
+                                point: normalizeToString(kp.point),
+                            })),
+                        }
+                        setTranslatedData(normalizedTranslation)
+                    }
                     if (t.pageLang) setPageLang(t.pageLang)
                     if (t.translatedExtractedText) setTranslatedExtractedText(t.translatedExtractedText)
                     if (t.extractedTextLang) setExtractedTextLang(t.extractedTextLang)
@@ -734,7 +747,11 @@ export default function DocSummaryPage() {
     // ── Download ──
     const handleDownload = () => {
         if (!data) return
-        const content = `# ${data.videoTitle}\n\n## Summary\n${data.summary}\n\n## Key Points\n${(data.keyPoints || []).map(kp => `- ${kp.point}`).join("\n")}\n\n## Explanation\n${data.explanation}\n\n## Extracted Text\n${data.transcript || "N/A"}\n`
+        // Use displaySummary/displayExplanation/displayKeyPoints for normalized values
+        const summaryText = normalizeToString(translatedData?.summary || data.summary)
+        const explanationText = normalizeToString(translatedData?.explanation || data.explanation)
+        const keyPointsText = (translatedData?.keyPoints || data.keyPoints || []).map((kp: any) => `- ${normalizeToString(kp.point)}`).join("\n")
+        const content = `# ${data.videoTitle}\n\n## Summary\n${summaryText}\n\n## Key Points\n${keyPointsText}\n\n## Explanation\n${explanationText}\n\n## Extracted Text\n${data.transcript || "N/A"}\n`
         const blob = new Blob([content], { type: "text/markdown" })
         const url = URL.createObjectURL(blob)
         const a = document.createElement("a")
@@ -764,7 +781,11 @@ export default function DocSummaryPage() {
     const displaySummary: string = showOriginal ? rawSummary : applyReplacements(rawSummary)
     const displayExplanation: string = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
     const displayTTS: string = showOriginal ? rawTTS : applyReplacements(rawTTS)
-    const displayKeyPoints = showOriginal ? rawKeyPoints : rawKeyPoints.map((kp: any) => ({ ...kp, point: applyReplacements(kp.point) }))
+    // Normalize each keyPoint.point to ensure it's a string, then apply replacements
+    const displayKeyPoints = rawKeyPoints.map((kp: any) => ({
+        ...kp,
+        point: showOriginal ? normalizeToString(kp.point) : applyReplacements(normalizeToString(kp.point)),
+    }))
     const displayExtractedText = showOriginal ? (orig?.transcript || "") : (translatedExtractedText || applyReplacements(data?.transcript || ""))
 
     // ── Loading ──
@@ -927,7 +948,9 @@ export default function DocSummaryPage() {
                                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">
                                         {i + 1}
                                     </span>
-                                    <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">{kp.point}</p>
+                                    <p className="text-zinc-600 dark:text-zinc-400 text-sm leading-relaxed">
+                                        <TypewriterText text={kp.point} isAnimating={isTextAnimating} />
+                                    </p>
                                 </li>
                             ))}
                         </ul>
