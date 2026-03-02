@@ -783,10 +783,58 @@ export default function VideoSummaryPage() {
     // Resolved display data
     // Note: data.summary/explanation/ttsSummary are already normalized at fetch boundary
     const orig = originalDataRef.current
-    const rawSummary: string = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
-    const rawExplanation: string = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
-    const rawTTS: string = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
-    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || [])
+
+    // ─── Safe render-boundary normalization ───
+    // Prevents raw JSON objects from leaking into JSX
+    const safeSummary =
+      typeof data?.summary === "string"
+        ? data.summary
+        : (data?.summary as any)?.summary ?? "";
+
+    const safeKeyPoints =
+      Array.isArray((data?.summary as any)?.keyPoints)
+        ? (data?.summary as any).keyPoints
+        : Array.isArray(data?.keyPoints)
+        ? data.keyPoints
+        : [];
+
+    const safeExplanation =
+      typeof data?.explanation === "string"
+        ? data.explanation
+        : (data?.summary as any)?.explanation ?? "";
+
+    const safeTTS =
+      typeof data?.ttsSummary === "string"
+        ? data.ttsSummary
+        : (data?.ttsSummary as any)?.summary ?? "";
+
+    // Same normalization for translatedData
+    const safeTranslatedSummary =
+      typeof translatedData?.summary === "string"
+        ? translatedData.summary
+        : (translatedData?.summary as any)?.summary ?? "";
+
+    const safeTranslatedKeyPoints =
+      Array.isArray((translatedData?.summary as any)?.keyPoints)
+        ? (translatedData?.summary as any).keyPoints
+        : Array.isArray(translatedData?.keyPoints)
+        ? translatedData.keyPoints
+        : [];
+
+    const safeTranslatedExplanation =
+      typeof translatedData?.explanation === "string"
+        ? translatedData.explanation
+        : (translatedData?.summary as any)?.explanation ?? "";
+
+    const safeTranslatedTTS =
+      typeof translatedData?.ttsSummary === "string"
+        ? translatedData.ttsSummary
+        : (translatedData?.ttsSummary as any)?.summary ?? "";
+
+    const rawSummary: string = showOriginal ? (orig?.summary || "") : (safeTranslatedSummary || safeSummary || "")
+    const rawExplanation: string = showOriginal ? (orig?.explanation || "") : (safeTranslatedExplanation || safeExplanation || "")
+    const rawTTS: string = showOriginal ? (orig?.ttsSummary || "") : (safeTranslatedTTS || safeTTS || "")
+    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (safeTranslatedKeyPoints.length > 0 ? safeTranslatedKeyPoints : safeKeyPoints)
     
     // Apply inline replacements for final display
     const displaySummary: string = showOriginal ? rawSummary : applyReplacements(rawSummary)
