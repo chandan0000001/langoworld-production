@@ -6,6 +6,7 @@ import { LingoProvider } from "@/lib/lingo";
 import { TranslationLoader } from "@/components/translation-loader";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { VersionCheck } from "@/components/version-check";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -103,6 +104,7 @@ export default function RootLayout({
             {children}
             <TranslationLoader />
             <Toaster />
+            <VersionCheck />
           </LingoProvider>
         </ThemeProvider>
       </body>

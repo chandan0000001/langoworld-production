@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   // turbopack: {}, // Disabled to fix PostCSS build issue
   serverExternalPackages: ["jsdom", "lingo.dev"],
+  headers: async () => [
+    {
+      source: "/version.json",
+      headers: [
+        { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+      ],
+    },
+  ],
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
