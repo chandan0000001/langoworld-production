@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSummary } from "@/lib/summary-store"
 
+// Cache video summaries for 5 minutes (300 seconds)
+const CACHE_MAX_AGE = 300
+
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -20,5 +23,10 @@ export async function GET(
         )
     }
 
-    return NextResponse.json(summary)
+    // Return with cache headers
+    return NextResponse.json(summary, {
+        headers: {
+            "Cache-Control": `public, s-maxage=${CACHE_MAX_AGE}, stale-while-revalidate=${CACHE_MAX_AGE * 2}`,
+        },
+    })
 }

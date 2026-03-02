@@ -27,8 +27,26 @@ export async function updateSession(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
+    // Check if user is soft-deleted
+    if (user) {
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("deleted_at")
+            .eq("id", user.id)
+            .single()
+        
+        // If user is soft-deleted, sign them out and redirect to homepage
+        if (profile?.deleted_at) {
+            await supabase.auth.signOut()
+            const url = request.nextUrl.clone()
+            url.pathname = "/"
+            url.searchParams.set("deleted", "true")
+            return NextResponse.redirect(url)
+        }
+    }
+
     // Protected routes — redirect to /login if not authenticated
-    const protectedPaths = ["/workspace", "/yt", "/username", "/admin"]
+    const protectedPaths = ["/workspace", "/yt", "/username", "/admin", "/settings"]
     const isProtected = protectedPaths.some((p) =>
         request.nextUrl.pathname.startsWith(p)
     )

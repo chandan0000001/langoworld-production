@@ -3,6 +3,9 @@ import { StatsCard } from "./components/stats-card"
 import { Users, Video, FileText, Languages, Clock } from "lucide-react"
 import Link from "next/link"
 
+// Revalidate dashboard stats every 60 seconds
+export const revalidate = 60
+
 export default async function AdminDashboard() {
   const stats = await getAdminStats()
 
