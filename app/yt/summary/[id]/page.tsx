@@ -7,24 +7,33 @@ import type { VideoSummaryData } from "@/lib/summary-store"
 import { createClient } from "@/lib/supabase-browser"
 import { useLingo, LANGUAGES } from "@/lib/lingo"
 
-// ─── Safe Summary Parser ───
-
-function parseSummaryString(raw: string): { summary: string; keyPoints?: any[] } {
-    if (typeof raw !== "string") return { summary: String(raw || "") }
-    const trimmed = raw.trim()
-    if (!trimmed.startsWith("{")) return { summary: raw }
-    try {
-        const parsed = JSON.parse(trimmed)
-        if (parsed && typeof parsed.summary === "string") {
-            return {
-                summary: parsed.summary,
-                keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : undefined
+// ─── Normalize To String (boundary normalization for YT summaries) ───
+// Recursively unwraps any structure to plain string.
+// Applied at data fetch boundary to ensure consistent rendering.
+function normalizeToString(val: unknown): string {
+    if (val == null) return ""
+    if (typeof val === "string") {
+        const trimmed = val.trim()
+        if (!trimmed) return ""
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                const parsed = JSON.parse(trimmed)
+                return normalizeToString(parsed)
+            } catch {
+                return val
             }
         }
-        return { summary: raw }
-    } catch {
-        return { summary: raw }
+        return val
     }
+    if (typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if ("summary" in obj && obj.summary != null) return normalizeToString(obj.summary)
+        if ("content" in obj && obj.content != null) return normalizeToString(obj.content)
+        if ("text" in obj && obj.text != null) return normalizeToString(obj.text)
+        if (Array.isArray(val)) return ""
+        return ""
+    }
+    return String(val)
 }
 
 // ─── Extract YouTube Video ID from URL ───
@@ -542,8 +551,15 @@ export default function SummaryPage() {
                     const res = await fetch(`/api/yt-summary/${id}`)
                     if (!res.ok) throw new Error("not found")
                     const json = await res.json()
-                    setData(json)
-                    originalDataRef.current = JSON.parse(JSON.stringify(json))
+                    // Normalize API response at data boundary
+                    const normalizedJson = {
+                        ...json,
+                        summary: normalizeToString(json.summary),
+                        explanation: normalizeToString(json.explanation),
+                        ttsSummary: normalizeToString(json.ttsSummary),
+                    }
+                    setData(normalizedJson)
+                    originalDataRef.current = JSON.parse(JSON.stringify(normalizedJson))
                 } catch {
                     setError("Summary not found or has expired.")
                 } finally {
@@ -553,17 +569,18 @@ export default function SummaryPage() {
             }
 
             // Map Supabase row to VideoSummaryData
+            // Normalize text fields at data boundary (single point of normalization)
             const parsed: VideoSummaryData = {
                 id: row.id,
                 videoId: "",
                 videoUrl: row.video_url,
                 videoTitle: row.video_title,
                 channel: row.channel,
-                summary: row.summary,
+                summary: normalizeToString(row.summary),
                 transcript: row.transcript,
                 keyPoints: row.key_points || [],
-                explanation: row.explanation,
-                ttsSummary: row.tts_summary,
+                explanation: normalizeToString(row.explanation),
+                ttsSummary: normalizeToString(row.tts_summary),
                 chapters: row.chapters || [],
                 createdAt: row.created_at,
             }
@@ -582,7 +599,16 @@ export default function SummaryPage() {
             if (translations && translations.length > 0) {
                 const t = translations[0].translated_data as any
                 if (t) {
-                    if (t.translatedData) setTranslatedData(t.translatedData)
+                    // Normalize restored translation data to ensure strings
+                    if (t.translatedData) {
+                        const normalizedTranslation = {
+                            ...t.translatedData,
+                            summary: normalizeToString(t.translatedData.summary),
+                            explanation: normalizeToString(t.translatedData.explanation),
+                            ttsSummary: normalizeToString(t.translatedData.ttsSummary),
+                        }
+                        setTranslatedData(normalizedTranslation)
+                    }
                     if (t.pageLang) setPageLang(t.pageLang)
                     if (t.translatedTranscript) setTranslatedTranscript(t.translatedTranscript)
                     if (t.transcriptLang) setTranscriptLang(t.transcriptLang)
@@ -796,13 +822,12 @@ export default function SummaryPage() {
     }, [persistTranslations])
 
     // Resolved display data — if showOriginal, always show pristine original
+    // Data is already normalized at fetch boundary, no need to parse again
     const orig = originalDataRef.current
-    const rawSummaryValue = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
-    const parsedSummary = parseSummaryString(rawSummaryValue)
-    const rawSummary = parsedSummary.summary
+    const rawSummary = showOriginal ? (orig?.summary || "") : (translatedData?.summary || data?.summary || "")
     const rawExplanation = showOriginal ? (orig?.explanation || "") : (translatedData?.explanation || data?.explanation || "")
     const rawTTS = showOriginal ? (orig?.ttsSummary || "") : (translatedData?.ttsSummary || data?.ttsSummary || "")
-    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || parsedSummary.keyPoints || [])
+    const rawKeyPoints = showOriginal ? (orig?.keyPoints || []) : (translatedData?.keyPoints || data?.keyPoints || [])
     const displaySummary = showOriginal ? rawSummary : applyReplacements(rawSummary)
     const displayExplanation = showOriginal ? rawExplanation : applyReplacements(rawExplanation)
     const displayTTS = showOriginal ? rawTTS : applyReplacements(rawTTS)
