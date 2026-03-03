@@ -24,6 +24,11 @@ function LoginForm() {
         setMounted(true)
         const err = searchParams.get("error")
         if (err) setError("Authentication failed. Please try again.")
+
+        // Warm up Supabase connection to reduce cold start SSL errors
+        fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`, {
+            cache: "no-store",
+        }).catch(() => {}) // Fail silently
     }, [searchParams])
 
     const handleEmailAuth = async (e: React.FormEvent) => {
@@ -64,15 +69,36 @@ function LoginForm() {
         }
     }
 
-    const handleOAuth = async (provider: "google" | "github") => {
+    // Safe OAuth with retry to handle cold start SSL errors
+    const safeOAuthLogin = async (provider: "google" | "github", retries = 2): Promise<void> => {
         setError(null)
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider,
-            options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
-            },
-        })
-        if (error) setError(error.message)
+        try {
+            const health = await fetch(
+                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`,
+                { cache: "no-store" }
+            )
+
+            if (!health.ok) throw new Error("Supabase not ready")
+
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider,
+                options: {
+                    redirectTo: `${window.location.origin}/auth/callback`,
+                },
+            })
+
+            if (error) setError(error.message)
+        } catch (err) {
+            if (retries > 0) {
+                await new Promise(r => setTimeout(r, 800))
+                return safeOAuthLogin(provider, retries - 1)
+            }
+            setError("Authentication service temporarily unavailable. Please try again.")
+        }
+    }
+
+    const handleOAuth = (provider: "google" | "github") => {
+        safeOAuthLogin(provider)
     }
 
     return (
