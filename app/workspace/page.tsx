@@ -48,6 +48,32 @@ interface HistoryEntry {
     slug?: string
 }
 
+// ─── Normalize summary data before DB save (prevents JSON blobs in summary column) ───
+function normalizeSummary(val: unknown): string {
+    if (typeof val === "string") return val
+    if (val === null || val === undefined) return ""
+    if (typeof val === "object") {
+        const obj = val as Record<string, unknown>
+        if (typeof obj.summary === "string") return obj.summary
+        if (typeof obj.content === "string") return obj.content
+        if (typeof obj.text === "string") return obj.text
+    }
+    return ""
+}
+
+function normalizeKeyPoints(val: unknown): Array<{ timestamp: string; point: string }> {
+    if (Array.isArray(val)) {
+        return val.map((kp: any) => ({
+            timestamp: typeof kp.timestamp === "string" ? kp.timestamp : "—",
+            point: typeof kp.point === "string" ? kp.point : String(kp.point || ""),
+        }))
+    }
+    if (val && typeof val === "object" && "keyPoints" in val) {
+        return normalizeKeyPoints((val as any).keyPoints)
+    }
+    return []
+}
+
 export default function WorkspacePage() {
     const { t } = useLingo()
     const router = useRouter()
@@ -509,17 +535,17 @@ export default function WorkspacePage() {
                 title: data.videoTitle || null,
             })
 
-            // Save to Supabase
+            // Save to Supabase (normalize data to prevent JSON blobs)
             const { error: insertError } = await supabase.from("summaries").upsert({
                 id: data.summaryPageId,
                 user_id: user.id,
                 video_url: docUrl,
                 video_title: data.videoTitle || file.name,
                 channel: "Document",
-                summary: data.summary || "",
-                key_points: data.keyPoints || [],
-                explanation: data.explanation || "",
-                tts_summary: data.ttsSummary || "",
+                summary: normalizeSummary(data.summary),
+                key_points: normalizeKeyPoints(data.keyPoints),
+                explanation: normalizeSummary(data.explanation),
+                tts_summary: normalizeSummary(data.ttsSummary),
                 transcript: data.extractedText || "",
                 chapters: [],
                 source: "document",
