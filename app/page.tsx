@@ -587,6 +587,15 @@ export default function Home() {
                                 </p>
                             </div>
 
+                            {/* Legal Links */}
+                            <div>
+                                <h4 className="font-[family-name:var(--font-inter)] text-sm font-bold text-zinc-900 mb-4 uppercase tracking-wider">Legal</h4>
+                                <ul className="flex gap-5 font-[family-name:var(--font-inter)] text-sm text-zinc-500 font-medium">
+                                    <li><Link href="/terms" className="hover:text-zinc-900 transition-colors">Terms of Service</Link></li>
+                                    <li><Link href="/privacy" className="hover:text-zinc-900 transition-colors">Privacy Policy</Link></li>
+                                </ul>
+                            </div>
+
                             {/* Socials — horizontal on desktop */}
                             <div>
                                 <h4 className="font-[family-name:var(--font-inter)] text-sm font-bold text-zinc-900 mb-4 uppercase tracking-wider">Socials</h4>

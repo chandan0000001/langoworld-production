@@ -396,7 +396,10 @@ function LoginForm() {
 
                     {/* Footer */}
                     <p className="text-center text-[11px] text-zinc-300 mt-5 font-[family-name:var(--font-inter)] animate-fade-up delay-4">
-                        By continuing, you agree to LangoWorld&apos;s terms of service.
+                        By continuing, you agree to our{" "}
+                        <a href="/terms" className="text-zinc-400 hover:text-zinc-600 underline transition-colors">Terms</a>
+                        {" "}and{" "}
+                        <a href="/privacy" className="text-zinc-400 hover:text-zinc-600 underline transition-colors">Privacy Policy</a>.
                     </p>
                 </div>
             </div>
