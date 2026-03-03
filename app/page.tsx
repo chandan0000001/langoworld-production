@@ -432,23 +432,19 @@ export default function Home() {
 
                     {/* Headlines — Stacked Solid + Outline */}
                     <div className="flex flex-col items-center">
-                        {/* Solid Line — Letter-by-letter reveal */}
-                        <h1 className="font-[family-name:var(--font-inter)] text-6xl sm:text-7xl md:text-8xl lg:text-[7rem] font-black text-zinc-900 tracking-tighter leading-[0.9] flex">
-                            {"LangoWorld".split("").map((letter, i) => (
-                                <motion.span
-                                    key={i}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{
-                                        duration: 0.6,
-                                        delay: i * 0.05,
-                                        ease: [0.16, 1, 0.3, 1],
-                                    }}
-                                >
-                                    {letter}
-                                </motion.span>
-                            ))}
-                        </h1>
+                        {/* Solid Line — Single-element smooth reveal */}
+                        <motion.h1
+                            className="font-[family-name:var(--font-inter)] text-6xl sm:text-7xl md:text-8xl lg:text-[7rem] font-black text-zinc-900 tracking-tighter leading-[0.9]"
+                            style={{ willChange: "transform" }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{
+                                duration: 0.8,
+                                ease: [0.16, 1, 0.3, 1],
+                            }}
+                        >
+                            LangoWorld
+                        </motion.h1>
 
                         {/* Outline Line — "Global Voice" fade + slide */}
                         <motion.h1
@@ -456,12 +452,13 @@ export default function Home() {
                             style={{
                                 WebkitTextStroke: '2px #71717A',
                                 color: 'transparent',
+                                willChange: "transform",
                             }}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{
-                                duration: 0.7,
-                                delay: 0.5,
+                                duration: 0.8,
+                                delay: 0.15,
                                 ease: [0.16, 1, 0.3, 1],
                             }}
                         >
@@ -469,14 +466,15 @@ export default function Home() {
                         </motion.h1>
                     </div>
 
-                    {/* Subtitle — fade + slide + subtle blur */}
+                    {/* Subtitle — fade + slide */}
                     <motion.p
                         className="font-[family-name:var(--font-inter)] text-lg sm:text-xl text-zinc-600 font-medium tracking-tight max-w-2xl mx-auto leading-relaxed"
-                        initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                        style={{ willChange: "transform" }}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
                         transition={{
                             duration: 0.7,
-                            delay: 0.7,
+                            delay: 0.3,
                             ease: [0.16, 1, 0.3, 1],
                         }}
                     >
@@ -486,11 +484,12 @@ export default function Home() {
                     {/* Buttons Row — Centered CTAs */}
                     <motion.div
                         className="flex items-center justify-center gap-4"
+                        style={{ willChange: "transform" }}
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
                             duration: 0.6,
-                            delay: 0.9,
+                            delay: 0.45,
                             ease: [0.16, 1, 0.3, 1],
                         }}
                     >
