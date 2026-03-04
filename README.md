@@ -1,144 +1,42 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Gemini-2.5--flash-4285F4?logo=google" alt="Gemini" />
-  <img src="https://img.shields.io/badge/Supabase-Auth%20%2B%20DB-3ECF8E?logo=supabase" alt="Supabase" />
-  <img src="https://img.shields.io/badge/Cloudflare%20R2-Storage-F38020?logo=cloudflare" alt="R2" />
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
-</p>
+# 🌍 LangoWorld
 
-<h1 align="center">LangoWorld</h1>
-<p align="center"><strong>AI-Powered Video Intelligence & Translation Platform</strong></p>
+**AI-Powered Content Understanding & Translation Platform**
 
-<p align="center">
-  Summarize any video. Translate to 25+ languages. Listen with AI voice.
-</p>
+Transform YouTube videos, uploaded videos, and documents into summaries, translations, and audio — powered by Google Gemini AI.
 
----
+```
+╔═══════════════════════════════════════════════════════════════════╗
+║                                                                   ║
+║    📺 YouTube  →  🤖 AI Analysis  →  📝 Summary + 🔊 Audio        ║
+║    📹 Video    →  🤖 AI Analysis  →  📝 Summary + 🔊 Audio        ║
+║    📄 Document →  🤖 AI Analysis  →  📝 Summary + 🔊 Audio        ║
+║    🌐 Text     →  🤖 AI Translate →  22 Languages                 ║
+║                                                                   ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
 
-## Live Demo
-
-| Service | URL |
-|---------|-----|
-| **Web App** | https://langoworld-production.vercel.app/ |
-| **Backend API** | https://langoworld-production.onrender.com/ |
-
----
-
-## What is LangoWorld?
-
-LangoWorld transforms **YouTube videos**, **uploaded videos**, and **documents** into structured, multilingual content with:
-
-- AI-generated summaries and key points
-- Chapter extraction with timestamps
-- Text-to-speech narration
-- Translation to 25+ languages
-- Interactive React Flow workspace
-
----
-
-## Features
+## ✨ Features
 
 | Feature | Description |
 |---------|-------------|
-| **YouTube Summarizer** | Paste any YouTube URL → Get AI summary, key points, chapters |
-| **Video Upload** | Upload videos (any format) → Gemini analyzes content |
-| **Document Analysis** | PDF, images, text files → OCR + AI understanding |
-| **Translation** | Auto-detect language → Translate to 25+ languages |
-| **Read Aloud (TTS)** | AI voice reads summaries with R2-cached audio |
-| **Interactive Canvas** | Drag-and-drop React Flow workspace |
-| **Persistent History** | All summaries & translations saved to your account |
+| 📺 **YouTube Analysis** | Paste any YouTube URL, get AI-generated summary, key points, and explanation |
+| 📹 **Video Upload** | Upload MP4/MOV/WebM files for multimodal AI analysis |
+| 📄 **Document Processing** | Analyze PDFs, images, and text files with Gemini Vision |
+| 🌐 **Multi-Language Translation** | Translate to 22 languages with auto language detection |
+| 🔊 **Text-to-Speech** | Convert summaries to natural audio using Sarvam AI |
+| 📚 **History & Library** | All your summaries saved and searchable |
+| 🔐 **Secure Auth** | Google, GitHub, or email authentication |
+| 🌙 **Dark Mode** | Beautiful UI with light/dark themes |
 
----
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              USER BROWSER                                       │
-│                         React Flow Interactive Canvas                           │
-└────────────────────────────────────┬────────────────────────────────────────────┘
-                                     │
-┌────────────────────────────────────▼────────────────────────────────────────────┐
-│                              VERCEL (Next.js 16)                                │
-│                                                                                 │
-│  /api/video-understand     /api/document-understand    /api/translate          │
-│  /api/tts                  /api/youtube-understand     /api/detect-language    │
-└───────┬────────────────────────────┬────────────────────────────┬───────────────┘
-        │                            │                            │
-        ▼                            ▼                            ▼
-┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
-│  RENDER (Python)  │    │     SUPABASE      │    │  CLOUDFLARE R2    │
-│  Flask + Gemini   │    │  PostgreSQL + RLS │    │  Video + Audio    │
-│  Background Jobs  │    │  Google OAuth     │    │  Storage          │
-└───────────────────┘    └───────────────────┘    └───────────────────┘
-```
-
-For detailed architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
----
-
-## Tech Stack
-
-### Frontend
-- **Next.js 16** - App Router, SSR, API Routes
-- **React 19** - Latest features including React Compiler
-- **TypeScript 5** - Type safety
-- **Tailwind CSS 4** - Styling
-- **React Flow** - Interactive node-based canvas
-- **Framer Motion + GSAP** - Animations
-- **Radix UI + shadcn/ui** - Accessible components
-
-### Backend
-- **Vercel Serverless** - API routes
-- **Python Flask** - Video processing (Render)
-- **Inngest** - Background job orchestration
-
-### Data & AI
-- **Supabase** - PostgreSQL, Auth, Row-Level Security
-- **Cloudflare R2** - S3-compatible object storage
-- **Google Gemini 2.5-flash** - Video/document analysis, TTS
-- **lingo.dev** - Translation API (25+ languages)
-
----
-
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 20+
-- Python 3.10+ (for backend)
+- Node.js 18+
+- Python 3.9+ (for video processing backend)
 - Supabase account
+- Google Cloud API key (for Gemini)
 - Cloudflare R2 bucket
-- Google AI API key(s)
-- lingo.dev API key
-
-### Environment Variables
-
-Create `.env.local`:
-
-```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Google Gemini (comma-separated for rotation)
-GOOGLE_API_KEYS=key1,key2,key3
-
-# Cloudflare R2
-R2_ACCOUNT_ID=your-account-id
-R2_ACCESS_KEY_ID=your-access-key
-R2_SECRET_ACCESS_KEY=your-secret-key
-R2_BUCKET_NAME=your-bucket
-
-# Translation
-LINGO_API_KEY=your-lingo-key
-
-# Backend URL (Render)
-NEXT_PUBLIC_BACKEND_URL=https://your-backend.onrender.com
-```
 
 ### Installation
 
@@ -150,194 +48,214 @@ cd langoworld-production
 # Install dependencies
 npm install
 
-# Run development server
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your credentials
+
+# Run database migrations
+# Execute SQL files in Supabase SQL Editor:
+# 1. supabase-setup.sql
+# 2. supabase-admin-setup.sql
+# 3. supabase-soft-delete.sql
+
+# Start development server
 npm run dev
 ```
 
-Open http://localhost:3000
+### Environment Variables
 
-### Backend Setup (Python)
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-```bash
-cd yt-feature
+# Google Gemini (multiple keys for rotation)
+GOOGLE_API_KEY_1=AIza...
+GOOGLE_API_KEY_2=AIza...
+GOOGLE_API_KEY_3=AIza...
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or: venv\Scripts\activate  # Windows
+# Cloudflare R2
+R2_ACCOUNT_ID=xxx
+R2_ACCESS_KEY_ID=xxx
+R2_SECRET_ACCESS_KEY=xxx
+R2_BUCKET_NAME=langoworld
+R2_PUBLIC_URL=https://xxx.r2.dev
 
-# Install dependencies
-pip install -r requirements.txt
+# Sarvam AI (TTS)
+SARVAM_API_KEY=xxx
 
-# Run Flask server
-python server.py
+# Python Backend URL (for video processing)
+PYTHON_BACKEND_URL=https://your-render-app.onrender.com
 ```
 
----
-
-## Database Setup
-
-Run these SQL files in Supabase SQL Editor (in order):
-
-1. `supabase-setup.sql` - Create tables and basic RLS
-2. `supabase-admin-setup.sql` - Admin policies (optional)
-3. `supabase-soft-delete.sql` - Soft delete support (optional)
-4. `supabase-fix-summary-blobs.sql` - Fix any JSON blob data issues
-
----
-
-## Supported Languages
-
-| Language | Code | Language | Code |
-|----------|------|----------|------|
-| Bengali | bn | Marathi | mr |
-| Chinese (Simplified) | zh | Nepali | ne |
-| Chinese (Traditional) | zh-TW | Odia | or |
-| Dutch | nl | Portuguese | pt |
-| English | en | Punjabi | pa |
-| French | fr | Russian | ru |
-| German | de | Spanish | es |
-| Gujarati | gu | Tamil | ta |
-| Hindi | hi | Telugu | te |
-| Indonesian | id | Thai | th |
-| Italian | it | Vietnamese | vi |
-| Japanese | ja | | |
-| Kannada | kn | | |
-| Korean | ko | | |
-| Malayalam | ml | | |
-
----
-
-## API Routes
-
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/api/video-understand` | POST | Analyze uploaded video |
-| `/api/video-status/[id]` | GET | Poll video job status |
-| `/api/youtube-understand` | POST | Analyze YouTube URL |
-| `/api/document-understand` | POST | Analyze document (PDF/image/text) |
-| `/api/translate` | POST | Translate text |
-| `/api/detect-language` | POST | Detect text language |
-| `/api/tts` | POST | Generate TTS audio |
-| `/api/presigned-upload-video` | POST | Get R2 presigned URL |
-| `/api/chapters` | POST | Generate video chapters |
-| `/api/translate-chapters` | POST | Translate chapters |
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 Langoworld/
-├── app/
-│   ├── api/                    # API routes
-│   ├── workspace/              # Main workspace UI
-│   ├── video/[id]/             # Video summary pages
-│   ├── yt/[slug]/              # YouTube summary pages
-│   ├── login/                  # Authentication
-│   ├── terms/                  # Terms of Service
-│   ├── privacy/                # Privacy Policy
-│   └── admin/                  # Admin panel
-├── components/
-│   ├── workspace/              # React Flow nodes
-│   ├── ui/                     # shadcn/ui components
-│   └── version-check.tsx       # Auto-reload on deploy
-├── lib/
-│   ├── api-key-rotation.ts     # Gemini key rotation
-│   ├── request-queue.ts        # Rate limiting
-│   ├── supabase-browser.ts     # Supabase client
-│   └── summary-store.ts        # Summary utilities
-├── yt-feature/                 # Python backend
-│   ├── server.py               # Flask server
-│   └── services/               # Processing services
-└── public/
-    └── version.json            # Deployment version
+├── app/                    # Next.js App Router
+│   ├── workspace/          # Main application
+│   ├── api/                # API routes
+│   │   ├── youtube-understand/
+│   │   ├── video-understand/
+│   │   ├── document-understand/
+│   │   ├── translate/
+│   │   └── tts/
+│   └── [routes]/           # Page routes
+├── components/             # React components
+├── lib/                    # Utilities & helpers
+├── yt-feature/             # Python video backend
+└── public/                 # Static assets
 ```
 
----
+## 🔄 How It Works
 
-## Deployment
+### YouTube Processing
+
+```
+┌────────────┐    ┌─────────────┐    ┌────────────┐    ┌────────────┐
+│ Paste URL  │───▶│  Extract    │───▶│  Gemini    │───▶│   Save     │
+│            │    │  Transcript │    │  Analysis  │    │  Summary   │
+└────────────┘    └─────────────┘    └────────────┘    └────────────┘
+```
+
+### Video Upload
+
+```
+┌────────────┐    ┌─────────────┐    ┌────────────┐    ┌────────────┐
+│ Upload to  │───▶│   Python    │───▶│  Gemini    │───▶│   Save     │
+│    R2      │    │   Backend   │    │  Vision    │    │  Summary   │
+└────────────┘    └─────────────┘    └────────────┘    └────────────┘
+```
+
+### Document Analysis
+
+```
+┌────────────┐    ┌─────────────┐    ┌────────────┐    ┌────────────┐
+│ Upload     │───▶│  Detect     │───▶│  Gemini    │───▶│   Save     │
+│  PDF/IMG   │    │  File Type  │    │  Vision    │    │  Summary   │
+└────────────┘    └─────────────┘    └────────────┘    └────────────┘
+```
+
+## 🌐 Supported Languages
+
+Translation supports 22 languages:
+
+| | | | |
+|---|---|---|---|
+| 🇺🇸 English | 🇮🇳 Hindi | 🇪🇸 Spanish | 🇫🇷 French |
+| 🇩🇪 German | 🇮🇹 Italian | 🇵🇹 Portuguese | 🇷🇺 Russian |
+| 🇯🇵 Japanese | 🇰🇷 Korean | 🇨🇳 Chinese | 🇸🇦 Arabic |
+| 🇹🇷 Turkish | 🇻🇳 Vietnamese | 🇹🇭 Thai | 🇮🇩 Indonesian |
+| 🇵🇱 Polish | 🇳🇱 Dutch | 🇸🇪 Swedish | 🇬🇷 Greek |
+| 🇮🇱 Hebrew | 🇧🇩 Bengali | | |
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Next.js 14, React 18, Tailwind CSS, shadcn/ui |
+| **Backend** | Next.js API Routes, Python Flask |
+| **Database** | Supabase (PostgreSQL) |
+| **AI** | Google Gemini 2.5, Sarvam AI (TTS) |
+| **Storage** | Cloudflare R2 |
+| **Auth** | Supabase Auth (OAuth) |
+| **Hosting** | Vercel (Next.js), Render (Python) |
+
+## 📊 Database Schema
+
+```sql
+-- Core tables
+profiles      -- User profiles with username
+summaries     -- YouTube/Video/Document summaries
+translations  -- Translation history
+video_jobs    -- Async video processing queue
+
+-- All tables use Row Level Security (RLS)
+-- Users can only access their own data
+```
+
+## 🔒 Security Features
+
+- **Row Level Security (RLS)** - Database-level access control
+- **OAuth 2.0** - Secure authentication via Google/GitHub
+- **Presigned URLs** - No direct storage access
+- **API Key Rotation** - Multiple Gemini keys for reliability
+- **Soft Deletes** - Data recovery support
+
+## 🚀 Deployment
 
 ### Vercel (Frontend + API)
 
 ```bash
-# Deploy to Vercel
-vercel deploy --prod
-```
+# Install Vercel CLI
+npm i -g vercel
 
-Configure environment variables in Vercel dashboard.
+# Deploy
+vercel --prod
+```
 
 ### Render (Python Backend)
 
 1. Create new Web Service on Render
 2. Connect to `yt-feature/` directory
-3. Set build command: `pip install -r requirements.txt`
-4. Set start command: `python server.py`
-5. Add environment variables
+3. Set environment variables
+4. Build command: `pip install -r requirements.txt`
+5. Start command: `gunicorn server:app`
 
----
+## 📝 API Reference
 
-## Features in Detail
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/youtube-understand` | POST | Analyze YouTube video |
+| `/api/video-understand` | POST | Analyze uploaded video |
+| `/api/document-understand` | POST | Analyze document |
+| `/api/translate` | POST | Translate text |
+| `/api/tts` | POST | Generate speech |
+| `/api/video-status/:id` | GET | Check job status |
 
-### Version-Based Auto-Reload
+## 🐛 Troubleshooting
 
-The app automatically reloads when a new version is deployed:
+### Common Issues
 
-```typescript
-// Polls /version.json every 60 seconds
-// If version changes, triggers page reload
-// Prevents users from using stale code
-```
+**"Row Level Security policy violation"**
+- Ensure user is authenticated
+- Check that `user_id` matches `auth.uid()`
 
-### Data Normalization
+**"Gemini API rate limited"**
+- Add more API keys to rotation
+- Enable request queue with backoff
 
-AI responses are normalized before database storage to prevent JSON blob issues:
+**"Video processing stuck"**
+- Check Python backend logs on Render
+- Verify R2 credentials are correct
 
-```typescript
-// Ensures summary is always a plain string
-// Ensures keyPoints is always a proper array
-// Handles nested object edge cases
-```
+**"SSL handshake error"**
+- OAuth retry wrapper handles this automatically
+- Check network connectivity
 
-### OAuth Retry Wrapper
-
-Handles SSL handshake errors during Google OAuth:
-
-```typescript
-// Retries on ECONNRESET, SSL errors
-// Exponential backoff: 1s, 2s, 4s
-// Maximum 3 retry attempts
-```
-
----
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Create feature branch (`git checkout -b feature/amazing`)
 3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+4. Push to branch (`git push origin feature/amazing`)
+5. Open Pull Request
 
----
+## 📄 License
 
-## License
+MIT License - see [LICENSE](LICENSE) for details.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 🙏 Acknowledgments
 
----
-
-## Acknowledgments
-
-- [Google Gemini](https://ai.google.dev/) - AI analysis and TTS
-- [Supabase](https://supabase.com/) - Database and authentication
-- [Cloudflare R2](https://www.cloudflare.com/r2/) - Object storage
-- [lingo.dev](https://lingo.dev/) - Translation API
-- [React Flow](https://reactflow.dev/) - Interactive canvas
+- [Google Gemini](https://ai.google.dev/) - AI backbone
+- [Sarvam AI](https://sarvam.ai/) - Text-to-speech
+- [Supabase](https://supabase.com/) - Database & Auth
+- [Vercel](https://vercel.com/) - Hosting
 - [shadcn/ui](https://ui.shadcn.com/) - UI components
 
 ---
 
 <p align="center">
-  Made with ❤️ by the LangoWorld team
+  Built with ❤️ by the LangoWorld Team
 </p>
