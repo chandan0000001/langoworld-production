@@ -58,7 +58,7 @@ export function ContentTable({ items, type, onDelete, onReprocess }: ContentTabl
 
   const getViewUrl = (item: ContentItem) => {
     if (type === "document") return `/docs/${item.id}`
-    if (item.source === "youtube") return `/yt/${item.id}`
+    if (item.source === "youtube") return `/yt/summary/${item.id}`
     return `/video/${item.id}`
   }
 

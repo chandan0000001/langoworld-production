@@ -380,7 +380,7 @@ function LoginForm() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full flex items-center justify-center gap-2.5 px-4 py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-[family-name:var(--font-inter)] text-sm font-bold btn-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-zinc-900/20 hover:shadow-2xl hover:shadow-zinc-900/25 transition-all duration-200 mt-2"
+                                className="w-full flex items-center justify-center gap-2.5 px-4 py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl font-[family-name:var(--font-inter)] text-sm font-bold btn-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-zinc-900/20 hover:shadow-2xl hover:shadow-zinc-900/25 transition-all duration-200 mt-2"
                             >
                                 {loading ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -397,7 +397,7 @@ function LoginForm() {
                         <div className="mt-6 text-center">
                             <button
                                 onClick={() => { setIsLogin(!isLogin); setError(null); setSuccess(null) }}
-                                className="font-[family-name:var(--font-inter)] text-sm text-zinc-400 hover:text-zinc-600 transition-colors"
+                                className="font-[family-name:var(--font-inter)] text-sm text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
                             >
                                 {isLogin ? (
                                     <>Don&apos;t have an account?{" "}<span className="font-bold text-zinc-900">Sign up</span></>
